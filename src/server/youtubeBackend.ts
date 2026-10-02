@@ -77,255 +77,111 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
     return;
   }
 
-  const ytDlp = findYtDlpPath();
-  const nodePath = findNodePath();
   const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  let title = `Video de YouTube (${videoId})`;
+  let author = 'YouTube';
+  let thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
-  // Helper to respond with fallback formats if yt-dlp metadata fails on datacenter IP
-  const respondWithFallback = async () => {
-    let title = `Video de YouTube (${videoId})`;
-    let author = 'YouTube';
-    let thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-
+  // Fetch official YouTube oEmbed metadata in < 150ms without blocking on heavy yt-dlp manifests
+  try {
+    const oembedRes = await fetch(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(canonicalUrl)}&format=json`,
+      { signal: AbortSignal.timeout(3000) }
+    );
+    if (oembedRes.ok) {
+      const data = await oembedRes.json();
+      if (data.title) title = data.title;
+      if (data.author_name) author = data.author_name;
+      if (data.thumbnail_url) thumbnail = data.thumbnail_url;
+    }
+  } catch {
+    // Fallback to noembed if official oEmbed had network timeout
     try {
-      const oembedRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(canonicalUrl)}`);
-      if (oembedRes.ok) {
-        const odata = await oembedRes.json();
-        if (odata.title) title = odata.title;
-        if (odata.author_name) author = odata.author_name;
-        if (odata.thumbnail_url) thumbnail = odata.thumbnail_url;
+      const noembedRes = await fetch(
+        `https://noembed.com/embed?url=${encodeURIComponent(canonicalUrl)}`,
+        { signal: AbortSignal.timeout(3000) }
+      );
+      if (noembedRes.ok) {
+        const data = await noembedRes.json();
+        if (data.title) title = data.title;
+        if (data.author_name) author = data.author_name;
+        if (data.thumbnail_url) thumbnail = data.thumbnail_url;
       }
     } catch {
-      // ignore
+      // Keep defaults
     }
-
-    const videoFormats = [
-      {
-        id: 'yt_video_720p',
-        label: '720p HD (MP4)',
-        format: 'MP4',
-        quality: '720p',
-        type: 'video',
-        ext: '.mp4',
-        mimeType: 'video/mp4',
-        fileSize: 32000000,
-        supportsRangeRequests: true,
-        url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_720p&title=${encodeURIComponent(title)}`,
-      },
-      {
-        id: 'yt_video_360p',
-        label: '360p Rápido (MP4)',
-        format: 'MP4',
-        quality: '360p',
-        type: 'video',
-        ext: '.mp4',
-        mimeType: 'video/mp4',
-        fileSize: 12000000,
-        supportsRangeRequests: true,
-        url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_360p&title=${encodeURIComponent(title)}`,
-      },
-    ];
-
-    const audioFormats = [
-      {
-        id: 'yt_audio_mp3',
-        label: 'MP3 Alta Calidad (320 kbps)',
-        format: 'MP3',
-        quality: '320 kbps',
-        type: 'audio',
-        ext: '.mp3',
-        mimeType: 'audio/mpeg',
-        fileSize: 8500000,
-        supportsRangeRequests: true,
-        url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_mp3&title=${encodeURIComponent(title)}`,
-      },
-      {
-        id: 'yt_audio_m4a',
-        label: 'M4A / AAC Rápido (128 kbps)',
-        format: 'M4A',
-        quality: '128 kbps',
-        type: 'audio',
-        ext: '.m4a',
-        mimeType: 'audio/mp4',
-        fileSize: 3500000,
-        supportsRangeRequests: true,
-        url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_m4a&title=${encodeURIComponent(title)}`,
-      },
-    ];
-
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-    });
-    res.end(
-      JSON.stringify({
-        success: true,
-        videoId,
-        title,
-        author,
-        duration: 0,
-        thumbnail,
-        videoFormats,
-        audioFormats,
-      })
-    );
-  };
-
-  try {
-    const ytdlpArgs = [
-      '--dump-single-json',
-      '--no-warnings',
-      '--no-playlist',
-      '--extractor-args',
-      'youtube:player_client=android,web',
-      '--no-check-certificates',
-    ];
-
-    if (nodePath && fs.existsSync(nodePath)) {
-      ytdlpArgs.push('--js-runtimes', `node:${nodePath}`);
-    }
-
-    ytdlpArgs.push(canonicalUrl);
-
-    const proc = spawn(ytDlp, ytdlpArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-
-    proc.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    proc.on('close', async (code) => {
-      if (code !== 0 || !stdout.trim()) {
-        console.warn('yt-dlp JSON error, using resilient fallback:', stderr);
-        await respondWithFallback();
-        return;
-      }
-
-      try {
-        const data = JSON.parse(stdout);
-        const title = data.title || `Video de YouTube (${videoId})`;
-        const author = data.uploader || data.channel || 'YouTube';
-        const duration = Number(data.duration) || 0;
-        const thumbnail =
-          data.thumbnail ||
-          (data.thumbnails && data.thumbnails.length > 0
-            ? data.thumbnails[data.thumbnails.length - 1].url
-            : `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`);
-
-        const formatsRaw = Array.isArray(data.formats) ? data.formats : [];
-
-        // Check available video heights
-        const heights = new Set<number>();
-        formatsRaw.forEach((f: any) => {
-          if (f.vcodec !== 'none' && f.height) heights.add(f.height);
-        });
-
-        const videoFormats = [];
-        const audioFormats = [];
-
-        // High quality video (1080p if available)
-        if (heights.has(1080) || heights.has(1440) || heights.has(2160)) {
-          videoFormats.push({
-            id: 'yt_video_1080p',
-            label: '1080p Full HD (MP4)',
-            format: 'MP4',
-            quality: '1080p',
-            type: 'video',
-            ext: '.mp4',
-            mimeType: 'video/mp4',
-            fileSize: Math.round((duration * 3200 * 1024) / 8),
-            supportsRangeRequests: true,
-            url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_1080p&title=${encodeURIComponent(title)}`,
-          });
-        }
-
-        // Standard 720p HD
-        videoFormats.push({
-          id: 'yt_video_720p',
-          label: '720p HD (MP4)',
-          format: 'MP4',
-          quality: '720p',
-          type: 'video',
-          ext: '.mp4',
-          mimeType: 'video/mp4',
-          fileSize: Math.round((duration * 1200 * 1024) / 8),
-          supportsRangeRequests: true,
-          url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_720p&title=${encodeURIComponent(title)}`,
-        });
-
-        // 480p / 360p lightweight
-        videoFormats.push({
-          id: 'yt_video_360p',
-          label: '360p Rápido (MP4)',
-          format: 'MP4',
-          quality: '360p',
-          type: 'video',
-          ext: '.mp4',
-          mimeType: 'video/mp4',
-          fileSize: Math.round((duration * 500 * 1024) / 8),
-          supportsRangeRequests: true,
-          url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_360p&title=${encodeURIComponent(title)}`,
-        });
-
-        // Audio formats: MP3 High Quality (320kbps)
-        audioFormats.push({
-          id: 'yt_audio_mp3',
-          label: 'MP3 Alta Calidad (320 kbps)',
-          format: 'MP3',
-          quality: '320 kbps',
-          type: 'audio',
-          ext: '.mp3',
-          mimeType: 'audio/mpeg',
-          fileSize: Math.round((duration * 320 * 1024) / 8),
-          supportsRangeRequests: true,
-          url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_mp3&title=${encodeURIComponent(title)}`,
-        });
-
-        // Audio format: M4A / AAC Nativo (128kbps)
-        audioFormats.push({
-          id: 'yt_audio_m4a',
-          label: 'M4A / AAC Rápido (128 kbps)',
-          format: 'M4A',
-          quality: '128 kbps',
-          type: 'audio',
-          ext: '.m4a',
-          mimeType: 'audio/mp4',
-          fileSize: Math.round((duration * 128 * 1024) / 8),
-          supportsRangeRequests: true,
-          url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_m4a&title=${encodeURIComponent(title)}`,
-        });
-
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        });
-        res.end(
-          JSON.stringify({
-            success: true,
-            videoId,
-            title,
-            author,
-            duration,
-            thumbnail,
-            videoFormats,
-            audioFormats,
-          })
-        );
-      } catch (err: any) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Error al procesar JSON: ' + err.message }));
-      }
-    });
-  } catch (err: any) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: false, error: 'Error ejecutando yt-dlp: ' + err.message }));
   }
+
+  const videoFormats = [
+    {
+      id: 'yt_video_720p',
+      label: '720p HD (MP4)',
+      format: 'MP4',
+      quality: '720p',
+      type: 'video',
+      ext: '.mp4',
+      mimeType: 'video/mp4',
+      fileSize: 38000000,
+      supportsRangeRequests: true,
+      url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_720p&title=${encodeURIComponent(title)}`,
+    },
+    {
+      id: 'yt_video_360p',
+      label: '360p Rápido (MP4)',
+      format: 'MP4',
+      quality: '360p',
+      type: 'video',
+      ext: '.mp4',
+      mimeType: 'video/mp4',
+      fileSize: 14000000,
+      supportsRangeRequests: true,
+      url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_360p&title=${encodeURIComponent(title)}`,
+    },
+  ];
+
+  const audioFormats = [
+    {
+      id: 'yt_audio_mp3',
+      label: 'MP3 Alta Calidad (320 kbps)',
+      format: 'MP3',
+      quality: '320 kbps',
+      type: 'audio',
+      ext: '.mp3',
+      mimeType: 'audio/mpeg',
+      fileSize: 9000000,
+      supportsRangeRequests: true,
+      url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_mp3&title=${encodeURIComponent(title)}`,
+    },
+    {
+      id: 'yt_audio_m4a',
+      label: 'M4A / AAC Nativo (128 kbps)',
+      format: 'M4A',
+      quality: '128 kbps',
+      type: 'audio',
+      ext: '.m4a',
+      mimeType: 'audio/mp4',
+      fileSize: 3800000,
+      supportsRangeRequests: true,
+      url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_m4a&title=${encodeURIComponent(title)}`,
+    },
+  ];
+
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(
+    JSON.stringify({
+      success: true,
+      videoId,
+      title,
+      author,
+      duration: 0,
+      thumbnail,
+      videoFormats,
+      audioFormats,
+    })
+  );
 }
 
 export async function handleYouTubeStream(req: IncomingMessage, res: ServerResponse): Promise<void> {
