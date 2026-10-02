@@ -70,7 +70,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage 
   // Check cookie status on mount
   useEffect(() => {
     const base = getBackendBase();
-    fetch(`${base}/api/youtube/cookies/status`, { signal: AbortSignal.timeout(5000) })
+    fetch(`${base}/api/youtube/cookies/status`, { signal: AbortSignal.timeout(60000) })
       .then(r => r.json())
       .then(data => setCookieInfo(data))
       .catch(() => {});
@@ -83,14 +83,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage 
       return;
     }
     setCookieStatus('saving');
-    setCookieMessage('Enviando cookies al servidor...');
     const base = getBackendBase();
+
+    // Step 1: Wake up Render first (cold start can take 30-50s)
+    setCookieMessage('Despertando el servidor en la nube (puede tardar hasta 1 minuto)...');
+    try {
+      await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(60000) });
+    } catch {
+      // Server might be slow but still accept POST, continue anyway
+    }
+
+    // Step 2: Send cookies with generous timeout
+    setCookieMessage('Enviando cookies al servidor...');
     try {
       const resp = await fetch(`${base}/api/youtube/cookies`, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: cookieText,
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(60000),
       });
       const data = await resp.json();
       if (data.success) {
@@ -100,11 +110,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage 
         setCookieText('');
       } else {
         setCookieStatus('error');
-        setCookieMessage(`Error: ${data.error}`);
+        setCookieMessage(`Error del servidor: ${data.error}`);
       }
     } catch (e: any) {
+      const msg = e?.name === 'TimeoutError'
+        ? 'El servidor tardó demasiado en responder. Espera 1 minuto para que Render despierte y vuelve a intentarlo.'
+        : `No se pudo conectar: ${e.message}`;
       setCookieStatus('error');
-      setCookieMessage(`No se pudo conectar al backend: ${e.message}`);
+      setCookieMessage(msg);
     }
   };
 
