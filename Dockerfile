@@ -21,6 +21,9 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
     && /usr/local/bin/yt-dlp --version \
     && /usr/local/bin/deno --version
 
+# Instalar pytubefix como alternativa a yt-dlp para IPs de datacenter
+RUN pip3 install --no-cache-dir --break-system-packages pytubefix 2>/dev/null || pip3 install --no-cache-dir pytubefix 2>/dev/null || true
+
 WORKDIR /app
 
 # Copiar dependencias y archivo de bloqueo

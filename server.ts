@@ -42,6 +42,34 @@ app.get('/api/youtube/stream', (req, res) => {
   handleYouTubeStream(req, res);
 });
 
+// Cookie management endpoint – save cookies.txt (Netscape format) for yt-dlp
+app.post('/api/youtube/cookies', express.text({ type: '*/*', limit: '2mb' }), (req, res) => {
+  try {
+    const cookieText = req.body as string;
+    if (!cookieText || cookieText.trim().length < 20) {
+      res.status(400).json({ success: false, error: 'Cookie text too short or empty' });
+      return;
+    }
+    const cookiePath = path.join(process.cwd(), 'cookies.txt');
+    fs.writeFileSync(cookiePath, cookieText, 'utf8');
+    res.json({ success: true, message: 'Cookies saved successfully', bytes: cookieText.length });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Check if cookies are loaded
+app.get('/api/youtube/cookies/status', (req, res) => {
+  const cookiePath = path.join(process.cwd(), 'cookies.txt');
+  const hasCookieFile = fs.existsSync(cookiePath);
+  const hasCookieEnv = !!process.env.YOUTUBE_COOKIES;
+  res.json({
+    hasCookies: hasCookieFile || hasCookieEnv,
+    source: hasCookieFile ? 'file' : hasCookieEnv ? 'env' : 'none',
+    cookieFileBytes: hasCookieFile ? fs.statSync(cookiePath).size : 0,
+  });
+});
+
 // Serve frontend static build (dist folder) if available
 const distPath = path.join(import.meta.dirname || process.cwd(), 'dist');
 if (fs.existsSync(distPath)) {

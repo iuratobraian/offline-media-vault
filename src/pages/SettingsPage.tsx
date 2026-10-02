@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useMedia } from '../context/MediaContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import {
@@ -19,6 +19,10 @@ import {
   Wifi,
   Globe,
   RefreshCw,
+  Cookie,
+  Key,
+  AlertTriangle,
+  CheckCheck,
 } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -46,6 +50,63 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage 
   });
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string | null>(null);
+
+  // YouTube Cookies management
+  const [cookieText, setCookieText] = useState('');
+  const [cookieStatus, setCookieStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [cookieMessage, setCookieMessage] = useState<string | null>(null);
+  const [cookieInfo, setCookieInfo] = useState<{ hasCookies: boolean; source: string; cookieFileBytes: number } | null>(null);
+
+  // Get backend base URL for cookie submission
+  const getBackendBase = () => {
+    const stored = (typeof window !== 'undefined' && localStorage.getItem('omv_backend_url')) || '';
+    if (stored) return stored.replace(/\/+$/, '');
+    const host = typeof window !== 'undefined' ? window.location.hostname : '';
+    if (host === 'localhost' || host.startsWith('192.') || host.startsWith('10.')) return '';
+    // Default Render backend
+    return 'https://offline-media-vault.onrender.com';
+  };
+
+  // Check cookie status on mount
+  useEffect(() => {
+    const base = getBackendBase();
+    fetch(`${base}/api/youtube/cookies/status`, { signal: AbortSignal.timeout(5000) })
+      .then(r => r.json())
+      .then(data => setCookieInfo(data))
+      .catch(() => {});
+  }, []);
+
+  const handleSaveCookies = async () => {
+    if (!cookieText.trim()) {
+      setCookieStatus('error');
+      setCookieMessage('Pega el contenido del archivo cookies.txt primero.');
+      return;
+    }
+    setCookieStatus('saving');
+    setCookieMessage('Enviando cookies al servidor...');
+    const base = getBackendBase();
+    try {
+      const resp = await fetch(`${base}/api/youtube/cookies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: cookieText,
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setCookieStatus('saved');
+        setCookieMessage(`¡Cookies guardadas! (${data.bytes} bytes). Las descargas de YouTube deberían funcionar ahora.`);
+        setCookieInfo({ hasCookies: true, source: 'file', cookieFileBytes: data.bytes });
+        setCookieText('');
+      } else {
+        setCookieStatus('error');
+        setCookieMessage(`Error: ${data.error}`);
+      }
+    } catch (e: any) {
+      setCookieStatus('error');
+      setCookieMessage(`No se pudo conectar al backend: ${e.message}`);
+    }
+  };
 
   const handleSaveBackendUrl = (urlToSave: string) => {
     const trimmed = urlToSave.trim().replace(/\/+$/, '');
@@ -357,6 +418,108 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage 
             <code className="text-white bg-black/40 px-1 py-0.5 rounded">Dockerfile</code> incluido en el proyecto, o
             iniciar el servicio en tu PC con <code className="text-white bg-black/40 px-1 py-0.5 rounded">offline-media-vault.service</code>.
           </div>
+        </div>
+      </div>
+
+      {/* ──────────── YouTube Cookies (Unlock cloud downloads) ──────────── */}
+      <div className="rounded-3xl border border-amber-500/20 bg-[#0f1422] p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
+              <Cookie className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-white">Cookies de YouTube (Descargas en la nube)</h3>
+              <p className="text-xs text-slate-400">
+                Desbloquea las descargas desde el servidor 24/7 en la nube
+              </p>
+            </div>
+          </div>
+          {cookieInfo !== null && (
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              cookieInfo.hasCookies
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
+            }`}>
+              {cookieInfo.hasCookies ? <><CheckCheck className="h-3 w-3" /> Activas</> : <><AlertTriangle className="h-3 w-3" /> Sin cookies</>}
+            </span>
+          )}
+        </div>
+
+        {/* Why cookies are needed */}
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3.5 text-xs text-amber-200/90 leading-relaxed">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+            <p>
+              <strong>¿Por qué necesito esto?</strong> YouTube bloquea las descargas desde servidores en la nube (Render, Railway, etc.) porque detecta que son IPs de datacenter.
+              Al usar tus propias cookies de sesión de YouTube, el servidor descarga como si fueras tú, evitando el bloqueo.
+              <br /><br />
+              <strong>100% seguro:</strong> las cookies se guardan solo en tu servidor privado y nunca se comparten con terceros.
+            </p>
+          </div>
+        </div>
+
+        {/* Step-by-step instructions */}
+        <div className="space-y-2 text-xs text-slate-300">
+          <p className="font-semibold text-slate-200">Cómo obtener las cookies de YouTube en 3 pasos:</p>
+          <div className="space-y-2 rounded-2xl border border-white/5 bg-white/[0.02] p-3.5">
+            <div className="flex items-start gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 font-bold text-amber-400 text-[10px]">1</span>
+              <p>En tu PC, instala la extensión de Chrome/Firefox: <strong className="text-white">"Get cookies.txt LOCALLY"</strong> o <strong className="text-white">"cookies.txt"</strong></p>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 font-bold text-amber-400 text-[10px]">2</span>
+              <p>Entra a <strong className="text-white">youtube.com</strong> con tu cuenta, luego haz clic en la extensión y elige <strong className="text-white">"Export cookies.txt"</strong> (formato Netscape)</p>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 font-bold text-amber-400 text-[10px]">3</span>
+              <p>Abre el archivo descargado con el Bloc de Notas, copia TODO el contenido y pégalo aquí abajo</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Cookie textarea */}
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-slate-300">
+            Pega aquí el contenido de cookies.txt:
+          </label>
+          <textarea
+            value={cookieText}
+            onChange={(e) => { setCookieText(e.target.value); setCookieStatus('idle'); setCookieMessage(null); }}
+            placeholder={"# Netscape HTTP Cookie File\n# Export from youtube.com with 'Get cookies.txt LOCALLY' extension\n.youtube.com\tTRUE\t/\tTRUE\t...\n..."}
+            className="w-full h-28 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:border-amber-500 focus:outline-none font-mono resize-none"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSaveCookies}
+              disabled={cookieStatus === 'saving' || !cookieText.trim()}
+              className="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition active:scale-95 disabled:opacity-50"
+            >
+              {cookieStatus === 'saving' ? (
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+              ) : (
+                <Key className="h-3.5 w-3.5" />
+              )}
+              <span>Guardar cookies en el servidor</span>
+            </button>
+            {cookieInfo?.hasCookies && (
+              <span className="text-[11px] text-emerald-400">
+                Cookies activas ({cookieInfo.cookieFileBytes} bytes)
+              </span>
+            )}
+          </div>
+          {cookieMessage && (
+            <div className={`rounded-xl p-3 text-xs flex items-center gap-2 ${
+              cookieStatus === 'saved'
+                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                : cookieStatus === 'error'
+                ? 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+                : 'bg-white/5 border border-white/10 text-slate-300'
+            }`}>
+              <Info className="h-4 w-4 shrink-0" />
+              <span>{cookieMessage}</span>
+            </div>
+          )}
         </div>
       </div>
 

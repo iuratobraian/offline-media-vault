@@ -46,7 +46,7 @@ export const MiniPlayer: React.FC = () => {
   const speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
   return (
-    <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0e1424]/95 backdrop-blur-2xl shadow-2xl transition-all">
+    <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0e1424]/95 backdrop-blur-2xl shadow-2xl transition-all pb-[var(--sab)] md:pb-0">
       {/* Top thin interactive scrubber bar */}
       <div className="group relative -top-1 h-2 w-full cursor-pointer">
         <input
