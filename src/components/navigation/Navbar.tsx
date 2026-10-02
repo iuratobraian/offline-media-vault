@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
-import { HardDrive, Download, Sparkles, Smartphone, Check } from 'lucide-react';
+import { HardDrive, Download, Sparkles, Smartphone, Check, FolderSearch } from 'lucide-react';
 
 interface NavbarProps {
   onOpenAddModal: () => void;
+  onOpenFolderScanModal?: () => void;
   activeDownloadsCount: number;
   onNavigateToDownloads: () => void;
   onNavigateToStorage: () => void;
@@ -12,6 +13,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenAddModal,
+  onOpenFolderScanModal,
   activeDownloadsCount,
   onNavigateToDownloads,
   onNavigateToStorage,
@@ -105,6 +107,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Smartphone className="h-3.5 w-3.5" />
               <span>Instalar en iOS</span>
+            </button>
+          )}
+
+          {/* Escanear Carpeta Quick Button */}
+          {onOpenFolderScanModal && (
+            <button
+              onClick={onOpenFolderScanModal}
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition active:scale-95"
+              title="Escanear y sincronizar carpeta local"
+            >
+              <FolderSearch className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Escanear Carpeta</span>
+              <span className="sm:hidden">Escanear</span>
             </button>
           )}
 

@@ -23,18 +23,21 @@ import {
   Copy,
   Clock,
   ShieldAlert,
+  FolderSearch,
 } from 'lucide-react';
 
 interface AddContentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onDownloadStarted?: () => void;
+  onOpenFolderScanModal?: () => void;
 }
 
 export const AddContentModal: React.FC<AddContentModalProps> = ({
   isOpen,
   onClose,
   onDownloadStarted,
+  onOpenFolderScanModal,
 }) => {
   const { categories, addMedia, startDownload } = useMedia();
 
@@ -543,12 +546,32 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
                   Soporta MP3, WAV, M4A, AAC, OGG, OPUS, MP4, WebM, MOV. Se almacenarán físicamente en
                   IndexedDB y estarán disponibles sin internet.
                 </p>
-                <button
-                  type="button"
-                  className="mt-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-4 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30 transition"
-                >
-                  Explorar archivos locales
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    className="rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-4 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30 transition"
+                  >
+                    Explorar archivos
+                  </button>
+                  {onOpenFolderScanModal && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClose();
+                        onOpenFolderScanModal();
+                      }}
+                      className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-xs font-bold text-slate-950 hover:from-emerald-400 hover:to-teal-400 transition"
+                    >
+                      <FolderSearch className="h-3.5 w-3.5" />
+                      <span>Escanear carpeta completa</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div>

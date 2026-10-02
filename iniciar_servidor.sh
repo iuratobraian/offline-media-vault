@@ -76,9 +76,26 @@ echo " Servidor activo. Presiona Ctrl + C en cualquier momento para salir.  "
 echo "======================================================================"
 echo ""
 
-# Ejecutar el servidor dev accesible en toda la red local
-if [ "$RUNNER" = "bun" ]; then
-  exec bun run dev
-else
-  exec npm run dev
+# Liberar puerto 3000 si hay un proceso previo colgado
+OLD_PID=$(lsof -ti :3000 2>/dev/null)
+if [ -n "$OLD_PID" ]; then
+  echo "🔄 Liberando puerto 3000 previo..."
+  kill -15 $OLD_PID 2>/dev/null || kill -9 $OLD_PID 2>/dev/null || true
+  sleep 1
 fi
+
+echo "📦 Compilando aplicación y Service Worker para soporte 100% offline (Modo Avión)..."
+if [ "$RUNNER" = "bun" ]; then
+  bun run build
+else
+  npm run build
+fi
+
+echo ""
+echo "🚀 Iniciando servidor Offline Media Vault..."
+if [ "$RUNNER" = "bun" ]; then
+  exec bun run server.ts
+else
+  exec npx tsx server.ts
+fi
+

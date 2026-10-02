@@ -13,11 +13,13 @@ import {
 } from 'lucide-react';
 import { formatBytes } from '../../utils/formatters';
 import { StorageBreakdown } from '../../types/media';
+import { FolderSearch } from 'lucide-react';
 
 interface SidebarProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   onOpenAddModal: () => void;
+  onOpenFolderScanModal?: () => void;
   activeDownloadsCount: number;
   storageBreakdown: StorageBreakdown;
 }
@@ -26,6 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
   onOpenAddModal,
+  onOpenFolderScanModal,
   activeDownloadsCount,
   storageBreakdown,
 }) => {
@@ -52,15 +55,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-white/5 md:bg-[#0c101c]/80 md:backdrop-blur-xl">
       <div className="flex flex-1 flex-col justify-between p-4">
-        <div className="space-y-6">
-          {/* Add Content Big Action */}
-          <button
-            onClick={onOpenAddModal}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-3 px-4 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-teal-400 transition active:scale-[0.98]"
-          >
-            <PlusCircle className="h-5 w-5 text-slate-950" />
-            <span>AGREGAR CONTENIDO</span>
-          </button>
+        <div className="space-y-4">
+          {/* Add Content & Scan Folder Buttons */}
+          <div className="space-y-2">
+            <button
+              onClick={onOpenAddModal}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-3 px-4 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-teal-400 transition active:scale-[0.98]"
+            >
+              <PlusCircle className="h-5 w-5 text-slate-950" />
+              <span>AGREGAR CONTENIDO</span>
+            </button>
+
+            {onOpenFolderScanModal && (
+              <button
+                onClick={onOpenFolderScanModal}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 py-2.5 px-3 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition active:scale-[0.98]"
+              >
+                <FolderSearch className="h-4 w-4 text-emerald-400" />
+                <span>ESCANEAR CARPETA</span>
+              </button>
+            )}
+          </div>
 
           {/* Navigation Links */}
           <nav className="space-y-1">

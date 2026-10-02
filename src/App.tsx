@@ -9,6 +9,7 @@ import { VideoPlayerModal } from './components/player/VideoPlayerModal';
 import { AddContentModal } from './components/modals/AddContentModal';
 import { CategoryModal } from './components/modals/CategoryModal';
 import { OnboardingModal } from './components/modals/OnboardingModal';
+import { FolderScanModal } from './components/modals/FolderScanModal';
 
 // Pages
 import { DashboardPage } from './pages/DashboardPage';
@@ -24,6 +25,7 @@ const AppContent: React.FC = () => {
 
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isFolderScanModalOpen, setIsFolderScanModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   const activeDownloadsCount = downloadTasks.filter(
@@ -47,7 +49,12 @@ const AppContent: React.FC = () => {
           />
         );
       case 'library':
-        return <LibraryPage onOpenAddModal={() => setIsAddModalOpen(true)} />;
+        return (
+          <LibraryPage
+            onOpenAddModal={() => setIsAddModalOpen(true)}
+            onOpenFolderScanModal={() => setIsFolderScanModalOpen(true)}
+          />
+        );
       case 'downloads':
         return <DownloadsPage onNavigateToLibrary={() => setCurrentTab('library')} />;
       case 'favorites':
@@ -69,7 +76,14 @@ const AppContent: React.FC = () => {
       case 'settings':
         return <SettingsPage onNavigateToStorage={() => setCurrentTab('storage')} />;
       default:
-        return <DashboardPage onOpenAddModal={() => setIsAddModalOpen(true)} onNavigateToLibrary={() => setCurrentTab('library')} onNavigateToDownloads={() => setCurrentTab('downloads')} onNavigateToStorage={() => setCurrentTab('storage')} />;
+        return (
+          <DashboardPage
+            onOpenAddModal={() => setIsAddModalOpen(true)}
+            onNavigateToLibrary={() => setCurrentTab('library')}
+            onNavigateToDownloads={() => setCurrentTab('downloads')}
+            onNavigateToStorage={() => setCurrentTab('storage')}
+          />
+        );
     }
   };
 
@@ -78,6 +92,7 @@ const AppContent: React.FC = () => {
       {/* Top Navbar */}
       <Navbar
         onOpenAddModal={() => setIsAddModalOpen(true)}
+        onOpenFolderScanModal={() => setIsFolderScanModalOpen(true)}
         activeDownloadsCount={activeDownloadsCount}
         onNavigateToDownloads={() => setCurrentTab('downloads')}
         onNavigateToStorage={() => setCurrentTab('storage')}
@@ -89,6 +104,7 @@ const AppContent: React.FC = () => {
           currentTab={currentTab}
           onSelectTab={(tab) => setCurrentTab(tab)}
           onOpenAddModal={() => setIsAddModalOpen(true)}
+          onOpenFolderScanModal={() => setIsFolderScanModalOpen(true)}
           activeDownloadsCount={activeDownloadsCount}
           storageBreakdown={storageBreakdown}
         />
@@ -117,7 +133,14 @@ const AppContent: React.FC = () => {
       <AddContentModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
+        onOpenFolderScanModal={() => setIsFolderScanModalOpen(true)}
         onDownloadStarted={() => setCurrentTab('downloads')}
+      />
+
+      {/* Folder Scanner Modal */}
+      <FolderScanModal
+        isOpen={isFolderScanModalOpen}
+        onClose={() => setIsFolderScanModalOpen(false)}
       />
 
       {/* Categories Management Modal */}
