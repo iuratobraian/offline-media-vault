@@ -7,12 +7,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Enable CORS for all origins (allows Vercel frontend or mobile apps to connect)
+// Enable CORS and CSP for media streaming and PWA features
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
   res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition');
+  res.header(
+    'Content-Security-Policy',
+    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; media-src 'self' blob: data: https: http:; connect-src 'self' blob: data: https: http:;"
+  );
   if (req.method === 'OPTIONS') {
     res.sendStatus(200);
     return;

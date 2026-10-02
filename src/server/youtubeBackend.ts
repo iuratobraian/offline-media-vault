@@ -265,16 +265,16 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
     } else if (formatKey === 'video_360p') {
       ext = 'mp4';
       mimeType = 'video/mp4';
-      args.push('-f', 'bestvideo[height<=360]+bestaudio/best[height<=360]/best', '--remux-video', 'mp4');
+      args.push('-f', 'bestvideo[height<=360]+bestaudio/best[height<=360]/best', '--postprocessor-args', 'Merger:-movflags frag_keyframe+empty_moov');
     } else if (formatKey === 'video_1080p') {
       ext = 'mp4';
       mimeType = 'video/mp4';
-      args.push('-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '--remux-video', 'mp4');
+      args.push('-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '--postprocessor-args', 'Merger:-movflags frag_keyframe+empty_moov');
     } else {
       // Default video_720p
       ext = 'mp4';
       mimeType = 'video/mp4';
-      args.push('-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best', '--remux-video', 'mp4');
+      args.push('-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best', '--postprocessor-args', 'Merger:-movflags frag_keyframe+empty_moov');
     }
 
     return args;
@@ -355,127 +355,78 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
     }
   };
 
-  // If already cached, serve immediately!
+  // 1. If already cached on server, serve immediately!
   if (fs.existsSync(cacheFilePath) && fs.statSync(cacheFilePath).size > 1024) {
     serveCachedFile();
     return;
   }
 
-  // If another request is currently downloading this same file, wait for it!
-  if (activeDownloads.has(cacheFileName)) {
+  // 2. Stream directly from yt-dlp to HTTP response (First byte in ~2s, no timeout!)
+  const safeTitle = customTitle.replace(/[/\\?%*:|"<>]/g, '_').trim() || videoId;
+  const downloadFileName = `${safeTitle}.${ext}`;
+
+  const args = buildArgs('visionos,ios');
+  args.push('-o', '-', canonicalUrl);
+
+  const proc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  let hasSentHeaders = false;
+  let stderr = '';
+
+  const cacheTempPath = `${cacheFilePath}.part_${Date.now()}`;
+  const cacheWriteStream = fs.createWriteStream(cacheTempPath);
+
+  proc.stdout.on('data', (chunk: Buffer) => {
+    if (!hasSentHeaders) {
+      hasSentHeaders = true;
+      res.writeHead(200, {
+        'Content-Type': mimeType,
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadFileName)}"`,
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
+        'Transfer-Encoding': 'chunked',
+      });
+    }
+    res.write(chunk);
     try {
-      await activeDownloads.get(cacheFileName);
-      if (fs.existsSync(cacheFilePath)) {
-        serveCachedFile();
-        return;
-      }
-    } catch {
-      // If previous failed, continue to attempt a fresh download below
-    }
-  }
+      cacheWriteStream.write(chunk);
+    } catch {}
+  });
 
-  // Function to execute yt-dlp with given client args
-  const executeDownload = (clientStr: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const tempDownloadPath = `${cacheFilePath}.tmp_${Date.now()}`;
-      const args = buildArgs(clientStr);
-      args.push('-o', tempDownloadPath, canonicalUrl);
+  proc.stderr.on('data', (d: Buffer) => {
+    stderr += d.toString();
+  });
 
-      const proc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-      let stderr = '';
-
-      proc.stderr.on('data', (d) => {
-        stderr += d.toString();
-      });
-
-      const cleanup = () => {
-        try {
-          if (fs.existsSync(tempDownloadPath)) fs.unlinkSync(tempDownloadPath);
-          const base = path.basename(tempDownloadPath);
-          const dirFiles = fs.readdirSync(CACHE_DIR);
-          for (const f of dirFiles) {
-            if (f.startsWith(base)) {
-              try { fs.unlinkSync(path.join(CACHE_DIR, f)); } catch {}
-            }
-          }
-        } catch {}
-      };
-
-      req.on('close', () => {
-        if (!res.writableEnded) {
-          try { proc.kill('SIGTERM'); } catch {}
-          cleanup();
-        }
-      });
-
-      proc.on('close', (code) => {
-        if (code !== 0) {
-          cleanup();
-          reject(new Error(`yt-dlp falló (${code}): ${stderr.slice(-300)}`));
-          return;
-        }
-
-        try {
-          let foundFile: string | null = null;
-          if (fs.existsSync(tempDownloadPath) && fs.statSync(tempDownloadPath).size > 1000) {
-            foundFile = tempDownloadPath;
-          } else {
-            const base = path.basename(tempDownloadPath);
-            const dirFiles = fs.readdirSync(CACHE_DIR);
-            const matching = dirFiles.find((f) => f.startsWith(base) && !f.endsWith('.part'));
-            if (matching) {
-              foundFile = path.join(CACHE_DIR, matching);
-            }
-          }
-
-          if (foundFile) {
-            if (foundFile !== cacheFilePath) {
-              try {
-                if (fs.existsSync(cacheFilePath)) fs.unlinkSync(cacheFilePath);
-                fs.renameSync(foundFile, cacheFilePath);
-              } catch {
-                fs.copyFileSync(foundFile, cacheFilePath);
-                try { fs.unlinkSync(foundFile); } catch {}
-              }
-            }
-            resolve();
-          } else {
-            reject(new Error('El archivo descargado no se encontró en el disco.'));
-          }
-        } catch (err: any) {
-          reject(err);
-        }
-      });
-    });
-  };
-
-  const downloadPromise = (async () => {
-    // Primary strategy: visionos client (bypasses bot verification without PO token)
-    try {
-      await executeDownload('visionos,ios');
-    } catch (errPrimary: any) {
-      console.warn('Fallo con visionos client, intentando fallback con tv/mweb:', errPrimary.message);
-      // Secondary fallback strategy
-      await executeDownload('tv,mweb');
-    }
-  })();
-
-  activeDownloads.set(cacheFileName, downloadPromise);
-
-  try {
-    await downloadPromise;
-    if (fs.existsSync(cacheFilePath)) {
-      serveCachedFile();
-    } else {
-      throw new Error('Archivo no disponible tras descarga.');
-    }
-  } catch (err: any) {
-    console.error('Error durante descarga:', err);
+  req.on('close', () => {
     if (!res.writableEnded) {
-      res.writeHead(500, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
-      res.end(`Error al descargar de YouTube: ${err.message}`);
+      try { proc.kill('SIGTERM'); } catch {}
+      try { cacheWriteStream.destroy(); } catch {}
+      try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
     }
-  } finally {
-    activeDownloads.delete(cacheFileName);
-  }
+  });
+
+  proc.on('close', (code) => {
+    try { cacheWriteStream.end(); } catch {}
+
+    if (code !== 0 && !hasSentHeaders) {
+      try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
+      if (!res.writableEnded) {
+        res.writeHead(500, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+        res.end(`Error al descargar de YouTube: ${stderr.slice(-300)}`);
+      }
+      return;
+    }
+
+    if (hasSentHeaders && !res.writableEnded) {
+      res.end();
+    }
+
+    if (code === 0 && fs.existsSync(cacheTempPath) && fs.statSync(cacheTempPath).size > 1000) {
+      try {
+        if (fs.existsSync(cacheFilePath)) fs.unlinkSync(cacheFilePath);
+        fs.renameSync(cacheTempPath, cacheFilePath);
+      } catch {}
+    } else {
+      try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
+    }
+  });
 }
