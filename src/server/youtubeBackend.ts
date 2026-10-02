@@ -184,6 +184,8 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
   );
 }
 
+const activeDownloads = new Map<string, Promise<void>>();
+
 export async function handleYouTubeStream(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
   const targetUrl = parsedUrl.searchParams.get('url');
@@ -191,14 +193,14 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
   const customTitle = parsedUrl.searchParams.get('title') || 'media';
 
   if (!targetUrl) {
-    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.writeHead(400, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
     res.end('Parámetro "url" requerido.');
     return;
   }
 
   const videoId = extractYouTubeId(targetUrl);
   if (!videoId) {
-    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.writeHead(400, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
     res.end('URL de YouTube no válida.');
     return;
   }
@@ -210,39 +212,68 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
   // Determine target extension, mimeType and yt-dlp arguments
   let ext = 'mp4';
   let mimeType = 'video/mp4';
-  const ytdlpArgs = [
-    '--no-warnings',
-    '--no-playlist',
-    '--extractor-args',
-    'youtube:player_client=android,web',
-    '--no-check-certificates',
-  ];
 
-  if (nodePath && fs.existsSync(nodePath)) {
-    ytdlpArgs.push('--js-runtimes', `node:${nodePath}`);
-  }
+  const buildArgs = (clientString: string): string[] => {
+    const args = [
+      '--no-warnings',
+      '--no-playlist',
+      '--extractor-args',
+      `youtube:player_client=${clientString}`,
+      '--no-check-certificates',
+      '--user-agent',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    ];
 
+    if (nodePath && fs.existsSync(nodePath)) {
+      args.push('--js-runtimes', `node:${nodePath}`);
+    }
+
+    if (process.env.YOUTUBE_COOKIES) {
+      try {
+        const cookieTmp = path.join(CACHE_DIR, 'yt_cookies.txt');
+        fs.writeFileSync(cookieTmp, process.env.YOUTUBE_COOKIES);
+        args.push('--cookies', cookieTmp);
+      } catch {}
+    } else if (fs.existsSync(path.join(process.cwd(), 'cookies.txt'))) {
+      args.push('--cookies', path.join(process.cwd(), 'cookies.txt'));
+    }
+
+    if (formatKey === 'audio_mp3') {
+      ext = 'mp3';
+      mimeType = 'audio/mpeg';
+      args.push('-f', 'ba/140/bestaudio', '-x', '--audio-format', 'mp3', '--audio-quality', '2');
+    } else if (formatKey === 'audio_m4a') {
+      ext = 'm4a';
+      mimeType = 'audio/mp4';
+      args.push('-f', '140/ba[ext=m4a]/ba/bestaudio');
+    } else if (formatKey === 'video_360p') {
+      ext = 'mp4';
+      mimeType = 'video/mp4';
+      args.push('-f', 'bestvideo[height<=360]+bestaudio/best[height<=360]/best', '--remux-video', 'mp4');
+    } else if (formatKey === 'video_1080p') {
+      ext = 'mp4';
+      mimeType = 'video/mp4';
+      args.push('-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '--remux-video', 'mp4');
+    } else {
+      // Default video_720p
+      ext = 'mp4';
+      mimeType = 'video/mp4';
+      args.push('-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best', '--remux-video', 'mp4');
+    }
+
+    return args;
+  };
+
+  // Determine extension upfront
   if (formatKey === 'audio_mp3') {
     ext = 'mp3';
     mimeType = 'audio/mpeg';
-    ytdlpArgs.push('-x', '--audio-format', 'mp3', '--audio-quality', '0');
   } else if (formatKey === 'audio_m4a') {
     ext = 'm4a';
     mimeType = 'audio/mp4';
-    ytdlpArgs.push('-f', '140/ba[ext=m4a]/ba');
-  } else if (formatKey === 'video_360p') {
-    ext = 'mp4';
-    mimeType = 'video/mp4';
-    ytdlpArgs.push('-f', '18/best[height<=360][ext=mp4]/best[height<=360]/best');
-  } else if (formatKey === 'video_1080p') {
-    ext = 'mp4';
-    mimeType = 'video/mp4';
-    ytdlpArgs.push('-f', 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]/best', '--merge-output-format', 'mp4');
   } else {
-    // Default video_720p
     ext = 'mp4';
     mimeType = 'video/mp4';
-    ytdlpArgs.push('-f', '22/best[height<=720][ext=mp4]/bestvideo[height<=720]+bestaudio[ext=m4a]/best', '--merge-output-format', 'mp4');
   }
 
   const cacheFileName = `${videoId}_${formatKey}.${ext}`;
@@ -264,7 +295,10 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
         const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
 
         if (start >= totalSize || end >= totalSize) {
-          res.writeHead(416, { 'Content-Range': `bytes */${totalSize}` });
+          res.writeHead(416, {
+            'Content-Range': `bytes */${totalSize}`,
+            'Access-Control-Allow-Origin': '*',
+          });
           res.end();
           return;
         }
@@ -279,6 +313,7 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
           'Content-Type': mimeType,
           'Content-Disposition': `inline; filename="${encodeURIComponent(downloadFileName)}"`,
           'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
         });
 
         fileStream.pipe(res);
@@ -289,6 +324,7 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
           'Accept-Ranges': 'bytes',
           'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadFileName)}"`,
           'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
         });
 
         const fileStream = fs.createReadStream(cacheFilePath);
@@ -296,8 +332,10 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
       }
     } catch (err: any) {
       console.error('Error serving cache file:', err);
-      res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end('Error al leer el archivo descargado: ' + err.message);
+      if (!res.writableEnded) {
+        res.writeHead(500, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+        res.end('Error al leer el archivo descargado: ' + err.message);
+      }
     }
   };
 
@@ -307,66 +345,121 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
     return;
   }
 
-  // Not in cache: download with yt-dlp to cacheFilePath
-  const tempDownloadPath = `${cacheFilePath}.tmp_${Date.now()}`;
-  ytdlpArgs.push('-o', tempDownloadPath, canonicalUrl);
-
-  const proc = spawn(ytDlp, ytdlpArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  let stderr = '';
-  proc.stderr.on('data', (d) => {
-    stderr += d.toString();
-  });
-
-  // Handle client abort
-  req.on('close', () => {
-    if (!res.writableEnded) {
-      try {
-        proc.kill('SIGTERM');
-        if (fs.existsSync(tempDownloadPath)) fs.unlinkSync(tempDownloadPath);
-      } catch {
-        // ignore
-      }
-    }
-  });
-
-  proc.on('close', (code) => {
-    if (code !== 0) {
-      console.error(`yt-dlp exited with code ${code}:`, stderr);
-      if (fs.existsSync(tempDownloadPath)) {
-        try { fs.unlinkSync(tempDownloadPath); } catch {}
-      }
-      if (!res.writableEnded) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end(`Error al descargar de YouTube (código ${code}): ${stderr}`);
-      }
-      return;
-    }
-
+  // If another request is currently downloading this same file, wait for it!
+  if (activeDownloads.has(cacheFileName)) {
     try {
-      // Find the actual file (yt-dlp may add extension)
-      if (fs.existsSync(tempDownloadPath)) {
-        fs.renameSync(tempDownloadPath, cacheFilePath);
-      } else {
-        // Check if yt-dlp saved it with a modified extension
-        const dirFiles = fs.readdirSync(CACHE_DIR);
-        const matching = dirFiles.find((f) => f.startsWith(path.basename(tempDownloadPath)));
-        if (matching) {
-          fs.renameSync(path.join(CACHE_DIR, matching), cacheFilePath);
-        }
-      }
-
+      await activeDownloads.get(cacheFileName);
       if (fs.existsSync(cacheFilePath)) {
         serveCachedFile();
-      } else {
-        throw new Error('El archivo procesado no se encontró en el disco.');
+        return;
       }
-    } catch (err: any) {
-      console.error('Error finalizando descarga:', err);
-      if (!res.writableEnded) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Error al finalizar el archivo: ' + err.message);
-      }
+    } catch {
+      // If previous failed, continue to attempt a fresh download below
     }
-  });
+  }
+
+  // Function to execute yt-dlp with given client args
+  const executeDownload = (clientStr: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const tempDownloadPath = `${cacheFilePath}.tmp_${Date.now()}`;
+      const args = buildArgs(clientStr);
+      args.push('-o', tempDownloadPath, canonicalUrl);
+
+      const proc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+
+      proc.stderr.on('data', (d) => {
+        stderr += d.toString();
+      });
+
+      const cleanup = () => {
+        try {
+          if (fs.existsSync(tempDownloadPath)) fs.unlinkSync(tempDownloadPath);
+          const base = path.basename(tempDownloadPath);
+          const dirFiles = fs.readdirSync(CACHE_DIR);
+          for (const f of dirFiles) {
+            if (f.startsWith(base)) {
+              try { fs.unlinkSync(path.join(CACHE_DIR, f)); } catch {}
+            }
+          }
+        } catch {}
+      };
+
+      req.on('close', () => {
+        if (!res.writableEnded) {
+          try { proc.kill('SIGTERM'); } catch {}
+          cleanup();
+        }
+      });
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          cleanup();
+          reject(new Error(`yt-dlp falló (${code}): ${stderr.slice(-300)}`));
+          return;
+        }
+
+        try {
+          let foundFile: string | null = null;
+          if (fs.existsSync(tempDownloadPath) && fs.statSync(tempDownloadPath).size > 1000) {
+            foundFile = tempDownloadPath;
+          } else {
+            const base = path.basename(tempDownloadPath);
+            const dirFiles = fs.readdirSync(CACHE_DIR);
+            const matching = dirFiles.find((f) => f.startsWith(base) && !f.endsWith('.part'));
+            if (matching) {
+              foundFile = path.join(CACHE_DIR, matching);
+            }
+          }
+
+          if (foundFile) {
+            if (foundFile !== cacheFilePath) {
+              try {
+                if (fs.existsSync(cacheFilePath)) fs.unlinkSync(cacheFilePath);
+                fs.renameSync(foundFile, cacheFilePath);
+              } catch {
+                fs.copyFileSync(foundFile, cacheFilePath);
+                try { fs.unlinkSync(foundFile); } catch {}
+              }
+            }
+            resolve();
+          } else {
+            reject(new Error('El archivo descargado no se encontró en el disco.'));
+          }
+        } catch (err: any) {
+          reject(err);
+        }
+      });
+    });
+  };
+
+  const downloadPromise = (async () => {
+    // Primary strategy: visionos client (bypasses bot verification without PO token)
+    try {
+      await executeDownload('visionos,ios');
+    } catch (errPrimary: any) {
+      console.warn('Fallo con visionos client, intentando fallback con tv/mweb:', errPrimary.message);
+      // Secondary fallback strategy
+      await executeDownload('tv,mweb');
+    }
+  })();
+
+  activeDownloads.set(cacheFileName, downloadPromise);
+
+  try {
+    await downloadPromise;
+    if (fs.existsSync(cacheFilePath)) {
+      serveCachedFile();
+    } else {
+      throw new Error('Archivo no disponible tras descarga.');
+    }
+  } catch (err: any) {
+    console.error('Error durante descarga:', err);
+    if (!res.writableEnded) {
+      res.writeHead(500, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+      res.end(`Error al descargar de YouTube: ${err.message}`);
+    }
+  } finally {
+    activeDownloads.delete(cacheFileName);
+  }
 }
