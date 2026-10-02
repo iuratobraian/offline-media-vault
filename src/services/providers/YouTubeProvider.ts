@@ -8,6 +8,19 @@ export function getBackendBaseUrl(): string {
     if (saved && saved.trim()) {
       return saved.trim().replace(/\/+$/, '');
     }
+
+    // Default to 24/7 Render cloud backend when running on Vercel, mobile web or any external host
+    const host = window.location.hostname.toLowerCase();
+    if (host.includes('vercel.app') || host.includes('render.com') || host.includes('github.io')) {
+      return host.includes('render.com') ? '' : 'https://offline-media-vault.onrender.com';
+    }
+
+    // If on localhost or private LAN IP, use relative path
+    if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.')) {
+      return '';
+    }
+
+    return 'https://offline-media-vault.onrender.com';
   }
   return '';
 }
@@ -85,42 +98,54 @@ export class YouTubeProvider implements MediaProvider {
     let videoFormats: MediaFormatOption[] = [];
     let audioFormats: MediaFormatOption[] = [];
     let backendAvailable = false;
-    const baseUrl = getBackendBaseUrl();
+    let effectiveBaseUrl = getBackendBaseUrl();
 
-    // 1. Try local/configured backend endpoint
-    try {
-      const endpoint = `${baseUrl}/api/youtube/info?url=${encodeURIComponent(canonicalUrl)}`;
-      const backendRes = await fetch(endpoint, {
-        signal: AbortSignal.timeout(8000),
-      });
+    // 1. Try primary backend endpoint (local or configured)
+    const tryFetchBackend = async (targetBase: string): Promise<boolean> => {
+      try {
+        const endpoint = `${targetBase}/api/youtube/info?url=${encodeURIComponent(canonicalUrl)}`;
+        const backendRes = await fetch(endpoint, {
+          signal: AbortSignal.timeout(20000),
+        });
 
-      if (backendRes.ok) {
-        const data = await backendRes.json();
-        if (data.success) {
-          backendAvailable = true;
-          title = data.title || title;
-          author = data.author || author;
-          duration = data.duration || 0;
-          if (data.thumbnail) thumbnail = data.thumbnail;
-          videoFormats = (data.videoFormats || []).map((fmt: any) => ({
-            ...fmt,
-            url: fmt.url?.startsWith('/') && baseUrl ? `${baseUrl}${fmt.url}` : fmt.url,
-          }));
-          audioFormats = (data.audioFormats || []).map((fmt: any) => ({
-            ...fmt,
-            url: fmt.url?.startsWith('/') && baseUrl ? `${baseUrl}${fmt.url}` : fmt.url,
-          }));
+        if (backendRes.ok) {
+          const data = await backendRes.json();
+          if (data.success) {
+            title = data.title || title;
+            author = data.author || author;
+            duration = data.duration || 0;
+            if (data.thumbnail) thumbnail = data.thumbnail;
+            videoFormats = (data.videoFormats || []).map((fmt: any) => ({
+              ...fmt,
+              url: fmt.url?.startsWith('/') ? `${targetBase}${fmt.url}` : fmt.url,
+            }));
+            audioFormats = (data.audioFormats || []).map((fmt: any) => ({
+              ...fmt,
+              url: fmt.url?.startsWith('/') ? `${targetBase}${fmt.url}` : fmt.url,
+            }));
+            return true;
+          }
         }
+      } catch {
+        // fail
       }
-    } catch {
-      // Backend not running (e.g. static host without local backend)
+      return false;
+    };
+
+    backendAvailable = await tryFetchBackend(effectiveBaseUrl);
+
+    // If local/relative failed and not yet tried Render, try the Render cloud backend!
+    if (!backendAvailable && effectiveBaseUrl !== 'https://offline-media-vault.onrender.com') {
+      effectiveBaseUrl = 'https://offline-media-vault.onrender.com';
+      backendAvailable = await tryFetchBackend(effectiveBaseUrl);
     }
 
     // 2. Fallback to public oEmbed if title is not yet resolved
     if (!backendAvailable) {
       try {
         const oembedRes = await fetch(
-          `https://noembed.com/embed?url=${encodeURIComponent(canonicalUrl)}`
+          `https://noembed.com/embed?url=${encodeURIComponent(canonicalUrl)}`,
+          { signal: AbortSignal.timeout(4000) }
         );
         if (oembedRes.ok) {
           const data = await oembedRes.json();
