@@ -24,6 +24,19 @@ function findYtDlpPath(): string {
   return 'yt-dlp';
 }
 
+function findDenoPath(): string | null {
+  const possiblePaths = [
+    '/usr/local/bin/deno',
+    '/usr/bin/deno',
+    '/root/.deno/bin/deno',
+    path.join(os.homedir(), '.deno', 'bin', 'deno'),
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 function findNodePath(): string {
   const possiblePaths = [
     '/usr/bin/node',
@@ -224,7 +237,10 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     ];
 
-    if (nodePath && fs.existsSync(nodePath)) {
+    const denoPath = findDenoPath();
+    if (denoPath) {
+      args.push('--js-runtimes', `deno:${denoPath}`);
+    } else if (nodePath && fs.existsSync(nodePath)) {
       args.push('--js-runtimes', `node:${nodePath}`);
     }
 

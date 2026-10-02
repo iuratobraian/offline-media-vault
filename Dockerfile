@@ -11,9 +11,15 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Instalar Deno para que yt-dlp resuelva desafíos de JavaScript (EJS) de YouTube
+RUN curl -fsSL https://deno.land/install.sh | sh \
+    && cp /root/.deno/bin/deno /usr/local/bin/deno \
+    && chmod a+rx /usr/local/bin/deno
+
 # Instalar la versión más reciente de yt-dlp
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp
+    && chmod a+rx /usr/local/bin/yt-dlp \
+    && /usr/local/bin/yt-dlp --version
 
 WORKDIR /app
 
