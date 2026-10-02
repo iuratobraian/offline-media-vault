@@ -222,65 +222,10 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
   const nodePath = findNodePath();
   const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-  // Determine target extension, mimeType and yt-dlp arguments
+  // Determine target extension and mimeType
   let ext = 'mp4';
   let mimeType = 'video/mp4';
 
-  const buildArgs = (clientString: string): string[] => {
-    const args = [
-      '--no-warnings',
-      '--no-playlist',
-      '--extractor-args',
-      `youtube:player_client=${clientString}`,
-      '--no-check-certificates',
-      '--user-agent',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    ];
-
-    const denoPath = findDenoPath();
-    if (denoPath) {
-      args.push('--js-runtimes', `deno:${denoPath}`);
-    } else if (nodePath && fs.existsSync(nodePath)) {
-      args.push('--js-runtimes', `node:${nodePath}`);
-    }
-
-    if (process.env.YOUTUBE_COOKIES) {
-      try {
-        const cookieTmp = path.join(CACHE_DIR, 'yt_cookies.txt');
-        fs.writeFileSync(cookieTmp, process.env.YOUTUBE_COOKIES);
-        args.push('--cookies', cookieTmp);
-      } catch {}
-    } else if (fs.existsSync(path.join(process.cwd(), 'cookies.txt'))) {
-      args.push('--cookies', path.join(process.cwd(), 'cookies.txt'));
-    }
-
-    if (formatKey === 'audio_mp3') {
-      ext = 'mp3';
-      mimeType = 'audio/mpeg';
-      args.push('-f', 'ba/140/bestaudio', '-x', '--audio-format', 'mp3', '--audio-quality', '2');
-    } else if (formatKey === 'audio_m4a') {
-      ext = 'm4a';
-      mimeType = 'audio/mp4';
-      args.push('-f', '140/ba[ext=m4a]/ba/bestaudio');
-    } else if (formatKey === 'video_360p') {
-      ext = 'mp4';
-      mimeType = 'video/mp4';
-      args.push('-f', 'bestvideo[height<=360]+bestaudio/best[height<=360]/best', '--postprocessor-args', 'Merger:-movflags frag_keyframe+empty_moov');
-    } else if (formatKey === 'video_1080p') {
-      ext = 'mp4';
-      mimeType = 'video/mp4';
-      args.push('-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best', '--postprocessor-args', 'Merger:-movflags frag_keyframe+empty_moov');
-    } else {
-      // Default video_720p
-      ext = 'mp4';
-      mimeType = 'video/mp4';
-      args.push('-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best', '--postprocessor-args', 'Merger:-movflags frag_keyframe+empty_moov');
-    }
-
-    return args;
-  };
-
-  // Determine extension upfront
   if (formatKey === 'audio_mp3') {
     ext = 'mp3';
     mimeType = 'audio/mpeg';
@@ -361,72 +306,133 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
     return;
   }
 
-  // 2. Stream directly from yt-dlp to HTTP response (First byte in ~2s, no timeout!)
+  // 2. Build arguments builder with client fallback
+  const buildArgs = (clientString: string): string[] => {
+    const args = [
+      '--no-warnings',
+      '--no-playlist',
+      '--extractor-args',
+      `youtube:player_client=${clientString}`,
+      '--no-check-certificates',
+      '--user-agent',
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+    ];
+
+    const denoPath = findDenoPath();
+    if (denoPath) {
+      args.push('--js-runtimes', `deno:${denoPath}`);
+    } else if (nodePath && fs.existsSync(nodePath)) {
+      args.push('--js-runtimes', `node:${nodePath}`);
+    }
+
+    if (process.env.YOUTUBE_COOKIES) {
+      try {
+        const cookieTmp = path.join(CACHE_DIR, 'yt_cookies.txt');
+        fs.writeFileSync(cookieTmp, process.env.YOUTUBE_COOKIES);
+        args.push('--cookies', cookieTmp);
+      } catch {}
+    } else if (fs.existsSync(path.join(process.cwd(), 'cookies.txt'))) {
+      args.push('--cookies', path.join(process.cwd(), 'cookies.txt'));
+    }
+
+    if (formatKey === 'audio_mp3') {
+      args.push('-f', 'bestaudio/ba/18/best', '-x', '--audio-format', 'mp3', '--audio-quality', '2');
+    } else if (formatKey === 'audio_m4a') {
+      args.push('-f', '140/ba[ext=m4a]/bestaudio/18/best', '-x', '--audio-format', 'm4a');
+    } else if (formatKey === 'video_360p') {
+      args.push('-f', '18/best[height<=360]/best');
+    } else if (formatKey === 'video_1080p') {
+      args.push('-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/18/best');
+    } else {
+      // Default video_720p
+      args.push('-f', 'best[height<=720]/18/best');
+    }
+
+    return args;
+  };
+
   const safeTitle = customTitle.replace(/[/\\?%*:|"<>]/g, '_').trim() || videoId;
   const downloadFileName = `${safeTitle}.${ext}`;
 
-  const args = buildArgs('visionos,ios');
-  args.push('-o', '-', canonicalUrl);
+  // Priority list of player clients: android (bypasses bot check without PO token) -> tv,mweb -> web
+  const clientCandidates = ['android,web', 'tv,mweb', 'android_creator'];
 
-  const proc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  let clientIndex = 0;
   let hasSentHeaders = false;
-  let stderr = '';
-
+  let accumulatedStderr = '';
   const cacheTempPath = `${cacheFilePath}.part_${Date.now()}`;
-  const cacheWriteStream = fs.createWriteStream(cacheTempPath);
+  let cacheWriteStream: fs.WriteStream | null = null;
 
-  proc.stdout.on('data', (chunk: Buffer) => {
-    if (!hasSentHeaders) {
-      hasSentHeaders = true;
-      res.writeHead(200, {
-        'Content-Type': mimeType,
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadFileName)}"`,
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
-        'Transfer-Encoding': 'chunked',
-      });
-    }
-    res.write(chunk);
-    try {
-      cacheWriteStream.write(chunk);
-    } catch {}
-  });
-
-  proc.stderr.on('data', (d: Buffer) => {
-    stderr += d.toString();
-  });
-
-  req.on('close', () => {
-    if (!res.writableEnded) {
-      try { proc.kill('SIGTERM'); } catch {}
-      try { cacheWriteStream.destroy(); } catch {}
-      try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
-    }
-  });
-
-  proc.on('close', (code) => {
-    try { cacheWriteStream.end(); } catch {}
-
-    if (code !== 0 && !hasSentHeaders) {
-      try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
-      if (!res.writableEnded) {
+  const tryNextClient = () => {
+    if (clientIndex >= clientCandidates.length) {
+      if (!res.writableEnded && !hasSentHeaders) {
         res.writeHead(500, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
-        res.end(`Error al descargar de YouTube: ${stderr.slice(-300)}`);
+        res.end(`Error al descargar de YouTube: ${accumulatedStderr.slice(-300)}`);
       }
+      try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
       return;
     }
 
-    if (hasSentHeaders && !res.writableEnded) {
-      res.end();
-    }
+    const currentClient = clientCandidates[clientIndex++];
+    const args = buildArgs(currentClient);
+    args.push('-o', '-', canonicalUrl);
 
-    if (code === 0 && fs.existsSync(cacheTempPath) && fs.statSync(cacheTempPath).size > 1000) {
+    cacheWriteStream = fs.createWriteStream(cacheTempPath);
+    const proc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    req.on('close', () => {
+      if (!res.writableEnded) {
+        try { proc.kill('SIGTERM'); } catch {}
+        try { cacheWriteStream?.destroy(); } catch {}
+        try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
+      }
+    });
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      if (!hasSentHeaders) {
+        hasSentHeaders = true;
+        res.writeHead(200, {
+          'Content-Type': mimeType,
+          'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadFileName)}"`,
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
+          'Transfer-Encoding': 'chunked',
+        });
+      }
+      res.write(chunk);
       try {
-        if (fs.existsSync(cacheFilePath)) fs.unlinkSync(cacheFilePath);
-        fs.renameSync(cacheTempPath, cacheFilePath);
+        cacheWriteStream?.write(chunk);
       } catch {}
-    } else {
-      try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
-    }
-  });
+    });
+
+    proc.stderr.on('data', (d: Buffer) => {
+      accumulatedStderr += d.toString();
+    });
+
+    proc.on('close', (code) => {
+      try { cacheWriteStream?.end(); } catch {}
+
+      if (code !== 0 && !hasSentHeaders) {
+        console.warn(`yt-dlp client "${currentClient}" failed (exit code ${code}), trying fallback...`);
+        tryNextClient();
+        return;
+      }
+
+      if (hasSentHeaders && !res.writableEnded) {
+        res.end();
+      }
+
+      if (code === 0 && fs.existsSync(cacheTempPath) && fs.statSync(cacheTempPath).size > 1000) {
+        try {
+          if (fs.existsSync(cacheFilePath)) fs.unlinkSync(cacheFilePath);
+          fs.renameSync(cacheTempPath, cacheFilePath);
+        } catch {}
+      } else {
+        try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
+      }
+    });
+  };
+
+  tryNextClient();
 }
+
