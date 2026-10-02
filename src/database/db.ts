@@ -1,4 +1,4 @@
-import { MediaItem, Category } from '../types/media';
+import { MediaItem, Category, Playlist } from '../types/media';
 
 const DB_NAME = 'OfflineMediaVaultDB';
 const DB_VERSION = 1;
@@ -295,6 +295,32 @@ export async function setSetting(key: string, value: any): Promise<void> {
   } catch (err) {
     console.error('Error saving setting:', err);
   }
+}
+
+// Playlist Operations (Persistent Local & Offline)
+export async function getAllPlaylists(): Promise<Playlist[]> {
+  try {
+    const listJson = localStorage.getItem('sharemusic_playlists');
+    if (listJson) return JSON.parse(listJson);
+  } catch {}
+  return [];
+}
+
+export async function savePlaylist(playlist: Playlist): Promise<void> {
+  const current = await getAllPlaylists();
+  const idx = current.findIndex((p) => p.id === playlist.id);
+  if (idx >= 0) {
+    current[idx] = playlist;
+  } else {
+    current.push(playlist);
+  }
+  localStorage.setItem('sharemusic_playlists', JSON.stringify(current));
+}
+
+export async function deletePlaylist(id: string): Promise<void> {
+  const current = await getAllPlaylists();
+  const filtered = current.filter((p) => p.id !== id);
+  localStorage.setItem('sharemusic_playlists', JSON.stringify(filtered));
 }
 
 // Database clear

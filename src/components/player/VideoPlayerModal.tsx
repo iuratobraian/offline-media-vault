@@ -17,6 +17,9 @@ import {
   ExternalLink,
   ShieldAlert,
   Music,
+  ChevronLeft,
+  SkipBack,
+  SkipForward,
 } from 'lucide-react';
 import { extractYouTubeId, extractVimeoId } from '../../services/analyzer';
 
@@ -44,6 +47,8 @@ export const VideoPlayerModal: React.FC = () => {
     togglePiP,
     registerVideoElement,
     reportVideoTimeUpdate,
+    playNext,
+    playPrevious,
   } = usePlayer();
 
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
@@ -122,31 +127,34 @@ export const VideoPlayerModal: React.FC = () => {
         ref={videoContainerRef}
         className="relative flex h-full w-full max-w-6xl flex-col justify-between overflow-hidden sm:h-[90vh] sm:rounded-2xl sm:border sm:border-white/10 sm:bg-black sm:shadow-2xl"
       >
-        {/* Top Overlay Header */}
+        {/* Top Overlay Header with Safe Area below Dynamic Island */}
         <div
-          className={`absolute top-0 left-0 right-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 transition-opacity duration-300 ${
+          className={`absolute top-0 left-0 right-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent px-4 pt-[max(1.25rem,calc(var(--sat)+0.75rem))] pb-3 transition-opacity duration-300 ${
             showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
-          <div className="flex items-center gap-3 min-w-0 pr-4">
-            <span
-              className={`flex h-2.5 w-2.5 rounded-full ${
-                isDownloaded ? 'bg-emerald-400' : 'bg-sky-400'
-              }`}
-            />
+          <div className="flex items-center gap-2.5 min-w-0 pr-4">
+            <button
+              onClick={closeVideoModal}
+              className="flex items-center gap-1 rounded-xl bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25 transition active:scale-95 shrink-0"
+              title="Volver al menú"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Atrás</span>
+            </button>
             <div className="min-w-0">
-              <h3 className="truncate text-sm sm:text-base font-bold text-white">
+              <h3 className="truncate text-xs sm:text-base font-bold text-white">
                 {currentItem.title}
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-[10px] sm:text-xs text-slate-400">
                 {isDownloaded
-                  ? '✓ Reproduciendo offline (IndexedDB local)'
+                  ? '✓ Reproduciendo offline'
                   : 'Transmitiendo en línea'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {document.pictureInPictureEnabled && !isYouTubeOnline && (
               <button
                 onClick={togglePiP}
@@ -159,7 +167,7 @@ export const VideoPlayerModal: React.FC = () => {
 
             <button
               onClick={closeVideoModal}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition"
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25 transition active:scale-95"
               title="Cerrar reproductor"
             >
               <X className="h-5 w-5" />
@@ -365,16 +373,35 @@ export const VideoPlayerModal: React.FC = () => {
             {/* Bottom Row Controls */}
             <div className="flex items-center justify-between">
               {/* Left group */}
-              <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                {/* Previous track */}
+                <button
+                  onClick={playPrevious}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition active:scale-95"
+                  title="Pista anterior"
+                >
+                  <SkipBack className="h-4 w-4 fill-current" />
+                </button>
+
                 <button
                   onClick={togglePlayPause}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 hover:bg-emerald-400 transition active:scale-95"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 hover:bg-emerald-400 transition active:scale-95"
+                  title={isPlaying ? 'Pausar' : 'Reproducir'}
                 >
                   {isPlaying ? (
                     <Pause className="h-5 w-5 fill-current" />
                   ) : (
                     <Play className="h-5 w-5 fill-current ml-0.5" />
                   )}
+                </button>
+
+                {/* Next track */}
+                <button
+                  onClick={playNext}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition active:scale-95"
+                  title="Pista siguiente"
+                >
+                  <SkipForward className="h-4 w-4 fill-current" />
                 </button>
 
                 {/* Skip buttons (10 sec backward / forward) */}

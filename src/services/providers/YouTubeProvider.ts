@@ -268,6 +268,40 @@ export class YouTubeProvider implements MediaProvider {
     }
     return await res.blob();
   }
+
+  isPlaylistUrl(urlStr: string): boolean {
+    try {
+      const url = new URL(urlStr.trim());
+      const host = url.hostname.toLowerCase();
+      if (!host.includes('youtube.com') && !host.includes('youtu.be')) return false;
+      return url.searchParams.has('list') || url.pathname.includes('/playlist');
+    } catch {
+      return false;
+    }
+  }
+
+  async fetchPlaylist(urlStr: string): Promise<{ success: boolean; title: string; total: number; items: Array<{ id: string; title: string; duration: number; thumbnail: string; url: string }> }> {
+    const baseUrl = getBackendBaseUrl();
+    const endpoint = `${baseUrl}/api/youtube/playlist?url=${encodeURIComponent(urlStr)}`;
+    const res = await fetch(endpoint, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) {
+      throw new Error(`Error al leer playlist: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async search(query: string, limit = 6): Promise<Array<{ id: string; title: string; duration: number; thumbnail: string; url: string }>> {
+    try {
+      const baseUrl = getBackendBaseUrl();
+      const endpoint = `${baseUrl}/api/youtube/search?q=${encodeURIComponent(query)}&limit=${limit}`;
+      const res = await fetch(endpoint, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.items || [];
+    } catch {
+      return [];
+    }
+  }
 }
 
 export const youTubeProvider = new YouTubeProvider();

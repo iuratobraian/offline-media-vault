@@ -27,9 +27,10 @@ import {
 
 interface SettingsPageProps {
   onNavigateToStorage: () => void;
+  onOpenOnboardingModal?: () => void;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage, onOpenOnboardingModal }) => {
   const {
     exportMetadataJson,
     importMetadataJson,
@@ -236,6 +237,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage 
               Configuración general, exportación/importación y estado del sistema
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Mis Gustos Musicales Section */}
+      <div className="rounded-3xl border border-white/10 bg-[#0f1422] p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 text-emerald-400">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-white">Mis Gustos Musicales</h3>
+              <p className="text-xs text-slate-400">
+                Personaliza qué cantantes, bandas o géneros aparecen en tu inicio sugeridos
+              </p>
+            </div>
+          </div>
+
+          {onOpenOnboardingModal && (
+            <button
+              onClick={onOpenOnboardingModal}
+              className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition active:scale-95"
+            >
+              Configurar gustos
+            </button>
+          )}
         </div>
       </div>
 

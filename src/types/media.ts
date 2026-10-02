@@ -93,6 +93,16 @@ export interface Category {
   isDefault?: boolean;
 }
 
+export interface Playlist {
+  id: string;
+  name: string;
+  description?: string;
+  coverImage?: string;
+  itemIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface DownloadTask {
   id: string; // matches mediaItem id
   title: string;

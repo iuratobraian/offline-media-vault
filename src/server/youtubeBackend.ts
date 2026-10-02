@@ -810,3 +810,101 @@ async function streamViaYtDlp(
 
   tryNextStrategy();
 }
+
+export async function handleYouTubePlaylist(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+  const targetUrl = parsedUrl.searchParams.get('url');
+
+  if (!targetUrl) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ success: false, error: 'Parámetro "url" requerido.' }));
+    return;
+  }
+
+  const ytDlp = findYtDlpPath();
+  const args = ['--flat-playlist', '--dump-single-json', '--no-warnings'];
+
+  const cookiePath = path.join(process.cwd(), 'cookies.txt');
+  if (fs.existsSync(cookiePath)) {
+    args.push('--cookies', cookiePath);
+  }
+
+  args.push(targetUrl);
+
+  const proc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '';
+  let stderr = '';
+
+  proc.stdout.on('data', (d) => { stdout += d.toString(); });
+  proc.stderr.on('data', (d) => { stderr += d.toString(); });
+
+  proc.on('close', () => {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    try {
+      const data = JSON.parse(stdout);
+      const title = data.title || 'Playlist de YouTube';
+      const entries = data.entries || [];
+      const items = entries.map((e: any) => ({
+        id: e.id,
+        title: e.title || `Video ${e.id}`,
+        duration: e.duration || 0,
+        thumbnail: e.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`,
+        url: `https://www.youtube.com/watch?v=${e.id}`,
+      }));
+      res.end(JSON.stringify({ success: true, title, total: items.length, items }));
+    } catch (e: any) {
+      res.end(JSON.stringify({ success: false, error: 'No se pudo leer la playlist. ' + stderr.slice(-200) }));
+    }
+  });
+}
+
+export async function handleYouTubeSearch(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+  const q = parsedUrl.searchParams.get('q') || '';
+  const limit = Math.min(parseInt(parsedUrl.searchParams.get('limit') || '6', 10), 20);
+
+  if (!q.trim()) {
+    res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ success: false, error: 'Parámetro "q" requerido.' }));
+    return;
+  }
+
+  const ytDlp = findYtDlpPath();
+  const args = ['--flat-playlist', '--dump-single-json', '--no-warnings', `ytsearch${limit}:${q}`];
+
+  const cookiePath = path.join(process.cwd(), 'cookies.txt');
+  if (fs.existsSync(cookiePath)) {
+    args.push('--cookies', cookiePath);
+  }
+
+  const proc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '';
+  let stderr = '';
+
+  proc.stdout.on('data', (d) => { stdout += d.toString(); });
+  proc.stderr.on('data', (d) => { stderr += d.toString(); });
+
+  proc.on('close', () => {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    try {
+      const data = JSON.parse(stdout);
+      const entries = data.entries || [];
+      const items = entries.map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        duration: e.duration || 0,
+        thumbnail: e.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`,
+        url: `https://www.youtube.com/watch?v=${e.id}`,
+      }));
+      res.end(JSON.stringify({ success: true, items }));
+    } catch {
+      res.end(JSON.stringify({ success: false, error: 'Error al buscar en YouTube' }));
+    }
+  });
+}

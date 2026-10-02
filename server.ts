@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { handleYouTubeInfo, handleYouTubeStream } from './src/server/youtubeBackend';
+import { handleYouTubeInfo, handleYouTubeStream, handleYouTubePlaylist, handleYouTubeSearch } from './src/server/youtubeBackend';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,6 +40,14 @@ app.get('/api/youtube/info', (req, res) => {
 
 app.get('/api/youtube/stream', (req, res) => {
   handleYouTubeStream(req, res);
+});
+
+app.get('/api/youtube/playlist', (req, res) => {
+  handleYouTubePlaylist(req, res);
+});
+
+app.get('/api/youtube/search', (req, res) => {
+  handleYouTubeSearch(req, res);
 });
 
 // Cookie management endpoint – save cookies.txt (Netscape format) for yt-dlp

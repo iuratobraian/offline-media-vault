@@ -6,17 +6,17 @@ import {
   Pause,
   SkipBack,
   SkipForward,
-  RotateCcw,
-  RotateCw,
   Volume2,
   VolumeX,
   Maximize2,
-  X,
-  Gauge,
   Music,
 } from 'lucide-react';
 
-export const MiniPlayer: React.FC = () => {
+interface MiniPlayerProps {
+  onOpenFullPlayer?: () => void;
+}
+
+export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
   const {
     currentItem,
     isPlaying,
@@ -24,29 +24,29 @@ export const MiniPlayer: React.FC = () => {
     duration,
     volume,
     isMuted,
-    playbackRate,
-    isLoading,
     togglePlayPause,
     seek,
-    seekRelative,
     setVolume,
     toggleMute,
-    setPlaybackRate,
     playNext,
     playPrevious,
     openVideoModal,
   } = usePlayer();
 
-  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-
   if (!currentItem) return null;
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  const handleOpenPlayer = () => {
+    if (currentItem.mediaType === 'video') {
+      openVideoModal();
+    } else {
+      onOpenFullPlayer?.();
+    }
+  };
 
   return (
-    <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0e1424]/95 backdrop-blur-2xl shadow-2xl transition-all pb-[var(--sab)] md:pb-0">
+    <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0e1424]/98 backdrop-blur-2xl shadow-2xl transition-all">
       {/* Top thin interactive scrubber bar */}
       <div className="group relative -top-1 h-2 w-full cursor-pointer">
         <input
@@ -67,16 +67,15 @@ export const MiniPlayer: React.FC = () => {
         </div>
       </div>
 
-      <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-3 sm:px-6">
-        {/* Left: Media Info */}
-        <div className="flex items-center gap-3 min-w-0 max-w-[45%] sm:max-w-xs">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-3 sm:px-6">
+        {/* Left: Media Info - Tapping opens full player */}
+        <div
+          onClick={handleOpenPlayer}
+          className="flex items-center gap-3 min-w-0 max-w-[55%] sm:max-w-xs cursor-pointer group"
+          title="Toca para ver reproductor completo"
+        >
           {/* Thumbnail / Disc */}
-          <div
-            onClick={() => currentItem.mediaType === 'video' && openVideoModal()}
-            className={`relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-800 border border-white/10 ${
-              currentItem.mediaType === 'video' ? 'cursor-pointer hover:opacity-90' : ''
-            }`}
-          >
+          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-800 border border-white/10 group-hover:border-emerald-500/50 transition">
             {currentItem.thumbnail ? (
               <img
                 src={currentItem.thumbnail}
@@ -96,15 +95,15 @@ export const MiniPlayer: React.FC = () => {
             {/* Offline badge tag */}
             {currentItem.hasLocalBlob && (
               <span
-                className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#0e1424]"
-                title="Reproduciendo offline desde almacenamiento local"
+                className="absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-[#0e1424]"
+                title="Offline"
               />
             )}
           </div>
 
           {/* Title & Artist */}
           <div className="min-w-0">
-            <h4 className="truncate text-xs sm:text-sm font-semibold text-white">
+            <h4 className="truncate text-xs sm:text-sm font-semibold text-white group-hover:text-emerald-300 transition-colors">
               {currentItem.title}
             </h4>
             <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -120,36 +119,24 @@ export const MiniPlayer: React.FC = () => {
           </div>
         </div>
 
-        {/* Center: Playback Controls */}
-        <div className="flex items-center gap-1 sm:gap-3">
-          {/* Skip -10s */}
-          <button
-            onClick={() => seekRelative(-10)}
-            className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition active:scale-95"
-            title="Retroceder 10 segundos"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </button>
-
-          {/* Prev */}
+        {/* Center: Playback Controls (Prev, Play/Pause, Next) */}
+        <div className="flex items-center gap-1 sm:gap-2">
+          {/* Previous */}
           <button
             onClick={playPrevious}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-white/5 hover:text-white transition active:scale-95"
-            title="Anterior"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-300 hover:bg-white/10 hover:text-white transition active:scale-95"
+            title="Pista anterior"
           >
-            <SkipBack className="h-4 w-4" />
+            <SkipBack className="h-4 w-4 fill-current" />
           </button>
 
-          {/* Play/Pause Main Button */}
+          {/* Play / Pause */}
           <button
             onClick={togglePlayPause}
-            disabled={isLoading}
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 hover:bg-emerald-400 transition active:scale-95 disabled:opacity-50"
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 shadow-md shadow-emerald-500/25 hover:scale-105 transition active:scale-95 mx-1"
             title={isPlaying ? 'Pausar' : 'Reproducir'}
           >
-            {isLoading ? (
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
-            ) : isPlaying ? (
+            {isPlaying ? (
               <Pause className="h-5 w-5 fill-current" />
             ) : (
               <Play className="h-5 w-5 fill-current ml-0.5" />
@@ -159,64 +146,20 @@ export const MiniPlayer: React.FC = () => {
           {/* Next */}
           <button
             onClick={playNext}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-white/5 hover:text-white transition active:scale-95"
-            title="Siguiente"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-300 hover:bg-white/10 hover:text-white transition active:scale-95"
+            title="Pista siguiente"
           >
-            <SkipForward className="h-4 w-4" />
-          </button>
-
-          {/* Skip +10s */}
-          <button
-            onClick={() => seekRelative(10)}
-            className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition active:scale-95"
-            title="Adelantar 10 segundos"
-          >
-            <RotateCw className="h-4 w-4" />
+            <SkipForward className="h-4 w-4 fill-current" />
           </button>
         </div>
 
-        {/* Right: Auxiliary Controls (Speed, Volume, Video Modal) */}
-        <div className="flex items-center gap-1 sm:gap-2">
-          {/* Speed button & popover */}
-          <div className="relative">
-            <button
-              onClick={() => setShowSpeedMenu(!showSpeedMenu)}
-              className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-300 hover:bg-white/5 transition"
-              title="Velocidad de reproducción"
-            >
-              <Gauge className="h-3.5 w-3.5 text-emerald-400" />
-              <span>{playbackRate}x</span>
-            </button>
-
-            {showSpeedMenu && (
-              <div className="absolute bottom-full right-0 mb-2 w-28 rounded-xl border border-white/10 bg-[#141b2d] p-1.5 shadow-xl">
-                <div className="text-[10px] font-semibold text-slate-400 px-2 py-1">Velocidad</div>
-                {speedOptions.map((rate) => (
-                  <button
-                    key={rate}
-                    onClick={() => {
-                      setPlaybackRate(rate);
-                      setShowSpeedMenu(false);
-                    }}
-                    className={`w-full text-left px-2 py-1 text-xs rounded-lg transition ${
-                      playbackRate === rate
-                        ? 'bg-emerald-500 text-slate-950 font-bold'
-                        : 'text-slate-300 hover:bg-white/10'
-                    }`}
-                  >
-                    {rate}x
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Volume Control (Desktop) */}
-          <div className="hidden lg:flex items-center gap-2 relative">
+        {/* Right: Expand to Full Screen + Volume */}
+        <div className="flex items-center gap-2">
+          {/* Volume slider (desktop only) */}
+          <div className="hidden md:flex items-center gap-2">
             <button
               onClick={toggleMute}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-white transition"
-              title={isMuted ? 'Activar sonido' : 'Silenciar'}
+              className="text-slate-400 hover:text-white"
             >
               {isMuted || volume === 0 ? (
                 <VolumeX className="h-4 w-4 text-rose-400" />
@@ -231,21 +174,18 @@ export const MiniPlayer: React.FC = () => {
               step={0.05}
               value={isMuted ? 0 : volume}
               onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-18 h-1"
+              className="w-16 h-1 accent-emerald-500 bg-white/10"
             />
           </div>
 
-          {/* If video: Open Theater / Fullscreen Modal */}
-          {currentItem.mediaType === 'video' && (
-            <button
-              onClick={openVideoModal}
-              className="flex items-center gap-1 rounded-lg bg-indigo-500/20 border border-indigo-500/30 px-2.5 py-1 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/30 transition active:scale-95"
-              title="Abrir reproductor de video"
-            >
-              <Maximize2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Ver Video</span>
-            </button>
-          )}
+          {/* Expand Full Player Button */}
+          <button
+            onClick={handleOpenPlayer}
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-slate-300 hover:bg-white/15 hover:text-white transition active:scale-95"
+            title="Abrir reproductor completo"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </div>

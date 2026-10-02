@@ -31,6 +31,7 @@ interface AddContentModalProps {
   onClose: () => void;
   onDownloadStarted?: () => void;
   onOpenFolderScanModal?: () => void;
+  initialUrl?: string;
 }
 
 export const AddContentModal: React.FC<AddContentModalProps> = ({
@@ -38,11 +39,12 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
   onClose,
   onDownloadStarted,
   onOpenFolderScanModal,
+  initialUrl,
 }) => {
   const { categories, addMedia, startDownload } = useMedia();
 
   const [activeTab, setActiveTab] = useState<'url' | 'local'>('url');
-  const [urlInput, setUrlInput] = useState('');
+  const [urlInput, setUrlInput] = useState(initialUrl || '');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [customTitle, setCustomTitle] = useState('');
@@ -55,6 +57,24 @@ export const AddContentModal: React.FC<AddContentModalProps> = ({
   const [downloadingFormatId, setDownloadingFormatId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    if (initialUrl && isOpen) {
+      setUrlInput(initialUrl);
+      setIsAnalyzing(true);
+      analyzeMediaUrl(initialUrl)
+        .then((result) => {
+          setAnalysis(result);
+          if (result.isValid) {
+            setCustomTitle(result.title);
+            setSelectedCategory(result.mediaType === 'video' ? 'videos' : 'musica');
+            setTagsInput([`#${result.source}`, `#${result.mediaType}`].join(' '));
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsAnalyzing(false));
+    }
+  }, [initialUrl, isOpen]);
 
   if (!isOpen) return null;
 
