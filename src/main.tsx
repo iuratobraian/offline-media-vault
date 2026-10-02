@@ -14,5 +14,17 @@ registerSW({
   },
 });
 
+// Explicit cache warming for iOS Safari standalone WebClips
+if (typeof window !== 'undefined' && 'caches' in window) {
+  window.addEventListener('load', async () => {
+    try {
+      const cache = await caches.open('offline-shell-v1');
+      await cache.addAll(['/', '/index.html']);
+    } catch (e) {
+      // Ignored if offline
+    }
+  });
+}
+
 createRoot(document.getElementById('root')!).render(<App />);
 
