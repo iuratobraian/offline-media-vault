@@ -226,8 +226,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
     }
 
+    // Always open player modal on playItem as requested
+    setIsVideoModalOpen(true);
+
     if (item.mediaType === 'audio') {
-      setIsVideoModalOpen(false);
       if (audioElementRef.current) {
         audioElementRef.current.src = mediaSourceUrl;
         audioElementRef.current.playbackRate = playbackRate;
@@ -239,9 +241,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           console.warn('Playback waiting for user gesture:', err);
         }
       }
-    } else {
-      // Video
-      setIsVideoModalOpen(true);
     }
 
     // Record last played in IndexedDB

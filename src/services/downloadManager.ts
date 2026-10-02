@@ -322,6 +322,14 @@ export class DownloadManager {
     // Save real binary Blob to IndexedDB
     await saveMediaBlob(item.id, finalBlob, finalMimeType);
 
+    // Automatically categorize in dedicated folders if not already customized
+    const finalCategory =
+      item.category && item.category !== 'general'
+        ? item.category
+        : finalMediaType === 'audio'
+        ? 'musica'
+        : 'videos';
+
     // Update metadata in IndexedDB
     await updateMediaItem(item.id, {
       hasLocalBlob: true,
@@ -331,6 +339,7 @@ export class DownloadManager {
       size: finalBlob.size,
       fileSize: finalBlob.size,
       mediaType: finalMediaType,
+      category: finalCategory,
       mimeType: finalMimeType,
       format: formatOption?.format || item.format,
       quality: formatOption?.quality || item.quality,
@@ -339,6 +348,25 @@ export class DownloadManager {
       canDownload: false,
       explanation: '✓ Disponible offline',
     });
+
+    // Also place the file directly into the device's downloads folder so user always finds local files
+    try {
+      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        const fileExt = formatOption?.ext || (finalMediaType === 'audio' ? '.mp3' : '.mp4');
+        const safeBaseName = (item.title || 'media').replace(/[/\\?%*:|"<>]/g, '_').trim();
+        const exportFileName = `${safeBaseName}${fileExt}`;
+        const blobUrl = URL.createObjectURL(finalBlob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = exportFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      }
+    } catch (e) {
+      console.warn('Auto device export:', e);
+    }
 
     if (task) {
       task.status = 'completed';

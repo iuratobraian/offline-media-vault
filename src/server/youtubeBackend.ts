@@ -25,9 +25,16 @@ function findYtDlpPath(): string {
 }
 
 function findNodePath(): string {
-  if (fs.existsSync('/usr/bin/node')) return '/usr/bin/node';
-  if (fs.existsSync('/usr/local/bin/node')) return '/usr/local/bin/node';
-  return process.execPath || 'node';
+  const possiblePaths = [
+    '/usr/bin/node',
+    '/usr/local/bin/node',
+    '/usr/bin/nodejs',
+    process.execPath,
+  ];
+  for (const p of possiblePaths) {
+    if (p && fs.existsSync(p)) return p;
+  }
+  return 'node';
 }
 
 export function extractYouTubeId(urlStr: string): string | null {
@@ -74,19 +81,113 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
   const nodePath = findNodePath();
   const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-  try {
-    const proc = spawn(
-      ytDlp,
-      [
-        '--dump-single-json',
-        '--no-warnings',
-        '--no-playlist',
-        '--js-runtimes',
-        `node:${nodePath}`,
-        canonicalUrl,
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] }
+  // Helper to respond with fallback formats if yt-dlp metadata fails on datacenter IP
+  const respondWithFallback = async () => {
+    let title = `Video de YouTube (${videoId})`;
+    let author = 'YouTube';
+    let thumbnail = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+
+    try {
+      const oembedRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(canonicalUrl)}`);
+      if (oembedRes.ok) {
+        const odata = await oembedRes.json();
+        if (odata.title) title = odata.title;
+        if (odata.author_name) author = odata.author_name;
+        if (odata.thumbnail_url) thumbnail = odata.thumbnail_url;
+      }
+    } catch {
+      // ignore
+    }
+
+    const videoFormats = [
+      {
+        id: 'yt_video_720p',
+        label: '720p HD (MP4)',
+        format: 'MP4',
+        quality: '720p',
+        type: 'video',
+        ext: '.mp4',
+        mimeType: 'video/mp4',
+        fileSize: 32000000,
+        supportsRangeRequests: true,
+        url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_720p&title=${encodeURIComponent(title)}`,
+      },
+      {
+        id: 'yt_video_360p',
+        label: '360p Rápido (MP4)',
+        format: 'MP4',
+        quality: '360p',
+        type: 'video',
+        ext: '.mp4',
+        mimeType: 'video/mp4',
+        fileSize: 12000000,
+        supportsRangeRequests: true,
+        url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_360p&title=${encodeURIComponent(title)}`,
+      },
+    ];
+
+    const audioFormats = [
+      {
+        id: 'yt_audio_mp3',
+        label: 'MP3 Alta Calidad (320 kbps)',
+        format: 'MP3',
+        quality: '320 kbps',
+        type: 'audio',
+        ext: '.mp3',
+        mimeType: 'audio/mpeg',
+        fileSize: 8500000,
+        supportsRangeRequests: true,
+        url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_mp3&title=${encodeURIComponent(title)}`,
+      },
+      {
+        id: 'yt_audio_m4a',
+        label: 'M4A / AAC Rápido (128 kbps)',
+        format: 'M4A',
+        quality: '128 kbps',
+        type: 'audio',
+        ext: '.m4a',
+        mimeType: 'audio/mp4',
+        fileSize: 3500000,
+        supportsRangeRequests: true,
+        url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_m4a&title=${encodeURIComponent(title)}`,
+      },
+    ];
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(
+      JSON.stringify({
+        success: true,
+        videoId,
+        title,
+        author,
+        duration: 0,
+        thumbnail,
+        videoFormats,
+        audioFormats,
+      })
     );
+  };
+
+  try {
+    const ytdlpArgs = [
+      '--dump-single-json',
+      '--no-warnings',
+      '--no-playlist',
+      '--extractor-args',
+      'youtube:player_client=android,web',
+      '--no-check-certificates',
+    ];
+
+    if (nodePath && fs.existsSync(nodePath)) {
+      ytdlpArgs.push('--js-runtimes', `node:${nodePath}`);
+    }
+
+    ytdlpArgs.push(canonicalUrl);
+
+    const proc = spawn(ytDlp, ytdlpArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
     let stdout = '';
     let stderr = '';
@@ -99,16 +200,10 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
       stderr += chunk.toString();
     });
 
-    proc.on('close', (code) => {
+    proc.on('close', async (code) => {
       if (code !== 0 || !stdout.trim()) {
-        console.error('yt-dlp error:', stderr);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            success: false,
-            error: 'No se pudo obtener información del video de YouTube: ' + (stderr || 'Error desconocido'),
-          })
-        );
+        console.warn('yt-dlp JSON error, using resilient fallback:', stderr);
+        await respondWithFallback();
         return;
       }
 
@@ -262,9 +357,14 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
   const ytdlpArgs = [
     '--no-warnings',
     '--no-playlist',
-    '--js-runtimes',
-    `node:${nodePath}`,
+    '--extractor-args',
+    'youtube:player_client=android,web',
+    '--no-check-certificates',
   ];
+
+  if (nodePath && fs.existsSync(nodePath)) {
+    ytdlpArgs.push('--js-runtimes', `node:${nodePath}`);
+  }
 
   if (formatKey === 'audio_mp3') {
     ext = 'mp3';
@@ -277,7 +377,7 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
   } else if (formatKey === 'video_360p') {
     ext = 'mp4';
     mimeType = 'video/mp4';
-    ytdlpArgs.push('-f', '18/best[height<=360][ext=mp4]/best[height<=360]');
+    ytdlpArgs.push('-f', '18/best[height<=360][ext=mp4]/best[height<=360]/best');
   } else if (formatKey === 'video_1080p') {
     ext = 'mp4';
     mimeType = 'video/mp4';
@@ -286,7 +386,7 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
     // Default video_720p
     ext = 'mp4';
     mimeType = 'video/mp4';
-    ytdlpArgs.push('-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]/best', '--merge-output-format', 'mp4');
+    ytdlpArgs.push('-f', '22/best[height<=720][ext=mp4]/bestvideo[height<=720]+bestaudio[ext=m4a]/best', '--merge-output-format', 'mp4');
   }
 
   const cacheFileName = `${videoId}_${formatKey}.${ext}`;

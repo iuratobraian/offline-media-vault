@@ -16,6 +16,7 @@ import {
   Sparkles,
   ExternalLink,
   ShieldAlert,
+  Music,
 } from 'lucide-react';
 import { extractYouTubeId, extractVimeoId } from '../../services/analyzer';
 
@@ -90,7 +91,7 @@ export const VideoPlayerModal: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
-  if (!isVideoModalOpen || !currentItem || currentItem.mediaType !== 'video') {
+  if (!isVideoModalOpen || !currentItem) {
     return null;
   }
 
@@ -206,8 +207,68 @@ export const VideoPlayerModal: React.FC = () => {
             </div>
           )}
 
-          {/* YouTube Online Embed fallback */}
-          {isYouTubeOnline && ytId ? (
+          {/* Audio Player Screen */}
+          {currentItem.mediaType === 'audio' ? (
+            <div className="flex flex-col items-center justify-center p-6 text-center space-y-5 max-w-md mx-auto my-auto animate-fade-in">
+              {/* Album Art with Ambient Glow */}
+              <div className="relative group">
+                <div
+                  className={`absolute -inset-4 rounded-full bg-gradient-to-tr from-emerald-500/30 to-indigo-500/30 blur-2xl transition-opacity duration-700 ${
+                    isPlaying ? 'opacity-100 animate-pulse' : 'opacity-40'
+                  }`}
+                />
+                <div
+                  className={`relative h-44 w-44 sm:h-64 sm:w-64 rounded-3xl overflow-hidden border border-white/20 shadow-2xl bg-slate-900 transition-transform duration-500 ${
+                    isPlaying ? 'scale-105' : 'scale-100'
+                  }`}
+                >
+                  {currentItem.thumbnail ? (
+                    <img
+                      src={currentItem.thumbnail}
+                      alt={currentItem.title}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center bg-gradient-to-tr from-emerald-600 to-teal-900">
+                      <Music className="h-20 w-20 text-white/80" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Track Info */}
+              <div className="space-y-1.5 px-4">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-400">
+                  <Music className="h-3.5 w-3.5" />
+                  <span>
+                    {currentItem.format || 'AUDIO'} • {isDownloaded ? '✓ OFFLINE' : 'ONLINE'}
+                  </span>
+                </div>
+                <h2 className="text-base sm:text-xl font-bold text-white line-clamp-2">
+                  {currentItem.title}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  {currentItem.category?.toUpperCase() || 'MÚSICA'}
+                </p>
+              </div>
+
+              {/* Visualizer wave bars animation when playing */}
+              <div className="flex items-center gap-1.5 h-6">
+                {[40, 70, 20, 90, 50, 80, 30, 60, 100, 45, 75, 25, 85].map((h, i) => (
+                  <span
+                    key={i}
+                    className={`w-1 rounded-full bg-emerald-400 transition-all duration-300 ${
+                      isPlaying ? 'animate-bounce' : 'h-1.5 opacity-40'
+                    }`}
+                    style={{
+                      height: isPlaying ? `${h}%` : '4px',
+                      animationDelay: `${(i % 5) * 120}ms`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : isYouTubeOnline && ytId ? (
             <div className="relative h-full w-full flex flex-col items-center justify-center">
               <iframe
                 src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&enablejsapi=1`}
