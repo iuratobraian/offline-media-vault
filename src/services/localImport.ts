@@ -85,6 +85,61 @@ export async function generateVideoThumbnail(file: File): Promise<string | undef
   });
 }
 
+export async function extractAudioCoverArt(file: File): Promise<string | undefined> {
+  try {
+    const slice = file.slice(0, 262144);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) {
+      return undefined;
+    }
+
+    for (let i = 10; i < bytes.length - 20; i++) {
+      if (
+        bytes[i] === 0x41 && // 'A'
+        bytes[i + 1] === 0x50 && // 'P'
+        bytes[i + 2] === 0x49 && // 'I'
+        bytes[i + 3] === 0x43    // 'C'
+      ) {
+        const frameSize = (bytes[i + 4] << 24) | (bytes[i + 5] << 16) | (bytes[i + 6] << 8) | bytes[i + 7];
+        if (frameSize <= 0 || i + 10 + frameSize > bytes.length) continue;
+
+        let offset = i + 10;
+        const encoding = bytes[offset++];
+        let mime = '';
+        while (offset < bytes.length && bytes[offset] !== 0) {
+          mime += String.fromCharCode(bytes[offset++]);
+        }
+        offset++;
+        offset++;
+
+        if (encoding === 0 || encoding === 3) {
+          while (offset < bytes.length && bytes[offset] !== 0) offset++;
+          offset++;
+        } else {
+          while (offset < bytes.length - 1 && !(bytes[offset] === 0 && bytes[offset + 1] === 0)) offset += 2;
+          offset += 2;
+        }
+
+        const imgBytes = bytes.slice(offset, i + 10 + frameSize);
+        if (imgBytes.length > 32) {
+          const blob = new Blob([imgBytes], { type: mime || 'image/jpeg' });
+          return new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => resolve(undefined as any);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    }
+  } catch {
+    // Ignore extraction error
+  }
+  return undefined;
+}
+
 export async function importLocalFile(file: File, category = 'musica'): Promise<MediaItem> {
   const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|ogv)$/i.test(file.name);
   const mediaType: MediaType = isVideo ? 'video' : 'audio';
@@ -94,6 +149,8 @@ export async function importLocalFile(file: File, category = 'musica'): Promise<
 
   if (mediaType === 'video') {
     thumbnail = await generateVideoThumbnail(file);
+  } else {
+    thumbnail = await extractAudioCoverArt(file);
   }
 
   const id = 'local_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);

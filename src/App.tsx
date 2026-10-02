@@ -79,6 +79,7 @@ const AppContent: React.FC = () => {
         return (
           <DashboardPage
             onOpenAddModal={() => setIsAddModalOpen(true)}
+            onOpenFolderScanModal={() => setIsFolderScanModalOpen(true)}
             onNavigateToLibrary={() => setCurrentTab('library')}
             onNavigateToDownloads={() => setCurrentTab('downloads')}
             onNavigateToStorage={() => setCurrentTab('storage')}

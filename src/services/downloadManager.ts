@@ -319,10 +319,33 @@ export class DownloadManager {
       this.notify();
     }
 
-    // Save real binary Blob to IndexedDB
+    // 1. Download and cache thumbnail image offline as Base64 data URL
+    let localThumbnail = item.thumbnail;
+    if (item.thumbnail && item.thumbnail.startsWith('http')) {
+      try {
+        const imgRes = await fetch(item.thumbnail, { signal: AbortSignal.timeout(8000) });
+        if (imgRes.ok) {
+          const imgBlob = await imgRes.blob();
+          const base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => resolve(item.thumbnail!);
+            reader.readAsDataURL(imgBlob);
+          });
+          if (base64 && base64.startsWith('data:image')) {
+            localThumbnail = base64;
+          }
+          await saveMediaBlob(`${item.id}_thumb`, imgBlob, imgBlob.type || 'image/jpeg');
+        }
+      } catch (err) {
+        console.warn('Could not cache thumbnail offline:', err);
+      }
+    }
+
+    // 2. Save real binary Blob to IndexedDB
     await saveMediaBlob(item.id, finalBlob, finalMimeType);
 
-    // Automatically categorize in dedicated folders if not already customized
+    // 3. Automatically categorize in dedicated folders
     const finalCategory =
       item.category && item.category !== 'general'
         ? item.category
@@ -330,8 +353,9 @@ export class DownloadManager {
         ? 'musica'
         : 'videos';
 
-    // Update metadata in IndexedDB
+    // 4. Update metadata in IndexedDB (offline-ready with cached image)
     await updateMediaItem(item.id, {
+      thumbnail: localThumbnail,
       hasLocalBlob: true,
       isOffline: true, // Only true because Blob is verified saved in IndexedDB
       downloadStatus: 'completed',
@@ -346,27 +370,8 @@ export class DownloadManager {
       canStreamOffline: true,
       requiresOnlinePlayback: false,
       canDownload: false,
-      explanation: '✓ Disponible offline',
+      explanation: '✓ Guardado en tu biblioteca offline',
     });
-
-    // Also place the file directly into the device's downloads folder so user always finds local files
-    try {
-      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-        const fileExt = formatOption?.ext || (finalMediaType === 'audio' ? '.mp3' : '.mp4');
-        const safeBaseName = (item.title || 'media').replace(/[/\\?%*:|"<>]/g, '_').trim();
-        const exportFileName = `${safeBaseName}${fileExt}`;
-        const blobUrl = URL.createObjectURL(finalBlob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = exportFileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-      }
-    } catch (e) {
-      console.warn('Auto device export:', e);
-    }
 
     if (task) {
       task.status = 'completed';
