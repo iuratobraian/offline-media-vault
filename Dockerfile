@@ -1,25 +1,25 @@
 # Dockerfile para ejecutar Offline Media Vault 24/7 en cualquier nube (Render, Railway, Fly.io, VPS)
 FROM oven/bun:latest
 
-# Instalar ffmpeg, python3, curl y dependencias
+# Copiar el binario oficial de Deno para resolver desafíos EJS de YouTube en yt-dlp
+COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
+
+# Instalar ffmpeg, python3, curl, unzip y dependencias
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
     python3-pip \
     nodejs \
     curl \
+    unzip \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-# Instalar Deno para que yt-dlp resuelva desafíos de JavaScript (EJS) de YouTube
-RUN curl -fsSL https://deno.land/install.sh | sh \
-    && cp /root/.deno/bin/deno /usr/local/bin/deno \
-    && chmod a+rx /usr/local/bin/deno
 
 # Instalar la versión más reciente de yt-dlp
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp \
-    && /usr/local/bin/yt-dlp --version
+    && /usr/local/bin/yt-dlp --version \
+    && /usr/local/bin/deno --version
 
 WORKDIR /app
 
