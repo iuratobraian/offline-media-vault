@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=true
+Exec=/bin/bash "/home/biurato/Escritorio/REPRODUCTOR OFFLINE/offline-media-vault (V2)/iniciar_servidor.sh"
+Name=Offline Media Vault
+Comment=Iniciar servidor local y reproductor offline
+Icon=multimedia-player
+Categories=AudioVideo;Player;
+Path=/home/biurato/Escritorio/REPRODUCTOR OFFLINE/offline-media-vault (V2)

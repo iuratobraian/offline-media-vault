@@ -1,0 +1,6 @@
+{
+  "name": "Offline Media Vault",
+  "description": "Tu biblioteca personal multimedia offline. Descarga, organiza y reproduce tus archivos de audio y video autorizados sin conexión a Internet.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

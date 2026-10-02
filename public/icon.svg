@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#181533" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="100" y1="100" x2="412" y2="412" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="50%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#10b981" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+  <circle cx="256" cy="256" r="180" stroke="url(#accentGrad)" stroke-width="14" fill="#0d1424" filter="url(#glow)" />
+  <!-- Vault tick marks -->
+  <line x1="256" y1="96" x2="256" y2="116" stroke="#10b981" stroke-width="6" stroke-linecap="round"/>
+  <line x1="256" y1="396" x2="256" y2="416" stroke="#6366f1" stroke-width="6" stroke-linecap="round"/>
+  <line x1="96" y1="256" x2="116" y2="256" stroke="#06b6d4" stroke-width="6" stroke-linecap="round"/>
+  <line x1="396" y1="256" x2="416" y2="256" stroke="#6366f1" stroke-width="6" stroke-linecap="round"/>
+  <!-- Inner circular vault plate -->
+  <circle cx="256" cy="256" r="120" fill="url(#accentGrad)" opacity="0.18" />
+  <!-- Media Play Symbol -->
+  <polygon points="220,180 340,256 220,332" fill="#ffffff" />
+  <!-- Small offline lock / shield indicator dot -->
+  <circle cx="340" cy="180" r="18" fill="#10b981" stroke="#0b0f19" stroke-width="4"/>
+</svg>
