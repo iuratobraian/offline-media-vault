@@ -21,8 +21,11 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
     && /usr/local/bin/yt-dlp --version \
     && /usr/local/bin/deno --version
 
-# Instalar pytubefix como alternativa a yt-dlp para IPs de datacenter
-RUN pip3 install --no-cache-dir --break-system-packages pytubefix 2>/dev/null || pip3 install --no-cache-dir pytubefix 2>/dev/null || true
+# Instalar yt-dlp[default] via pip — incluye yt-dlp-ejs para resolver el challenge "n" de YouTube
+# Este paquete es CLAVE: sin él yt-dlp no puede descargar desde IPs de datacenter
+RUN pip3 install --no-cache-dir --break-system-packages "yt-dlp[default]" \
+    || pip3 install --no-cache-dir "yt-dlp[default]" \
+    || true
 
 WORKDIR /app
 

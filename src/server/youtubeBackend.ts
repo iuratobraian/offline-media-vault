@@ -659,24 +659,33 @@ async function streamViaYtDlp(
   ytDlp: string,
   nodePath: string
 ): Promise<void> {
+  const hasCookies = !!process.env.YOUTUBE_COOKIES || fs.existsSync(path.join(process.cwd(), 'cookies.txt'));
+
   const buildArgs = (clientString: string, extraFlags: string[] = []): string[] => {
     const args: string[] = [
       '--no-warnings',
       '--no-playlist',
       '--no-check-certificates',
-      '--extractor-args', `youtube:player_client=${clientString}`,
-      '--user-agent', 'com.google.android.youtube/19.30.36 (Linux; U; Android 14) gzip',
-      '--add-header', 'Origin:https://www.youtube.com',
-      '--add-header', 'Referer:https://www.youtube.com/',
     ];
 
+    // Combine player_client and js_runtime into ONE --extractor-args to avoid overwrite
     const denoPath = findDenoPath();
     if (denoPath) {
-      args.push('--extractor-args', `youtube:js_runtime=deno`);
+      args.push('--extractor-args', `youtube:player_client=${clientString};js_runtime=deno`);
     } else if (nodePath && fs.existsSync(nodePath)) {
+      args.push('--extractor-args', `youtube:player_client=${clientString}`);
       args.push('--js-runtimes', `node:${nodePath}`);
+    } else {
+      args.push('--extractor-args', `youtube:player_client=${clientString}`);
     }
 
+    args.push(
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      '--add-header', 'Origin:https://www.youtube.com',
+      '--add-header', 'Referer:https://www.youtube.com/',
+    );
+
+    // Add cookies if available
     if (process.env.YOUTUBE_COOKIES) {
       try {
         const cookieTmp = path.join(CACHE_DIR, 'yt_cookies.txt');
@@ -703,14 +712,24 @@ async function streamViaYtDlp(
     return args;
   };
 
-  const clientStrategies: [string, string[]][] = [
-    ['mweb', []],
-    ['android,web', []],
-    ['tv', []],
-    ['tv,mweb', []],
-    ['android_creator', []],
-    ['web', ['--force-ipv4']],
-  ];
+  // When cookies are present: web/tv clients work (android skips cookies!)
+  // When no cookies: android client works without PO token
+  const clientStrategies: [string, string[]][] = hasCookies
+    ? [
+        ['web', []],                  // Best with cookies + yt-dlp-ejs
+        ['tv', []],                   // TV client accepts cookies
+        ['mweb', []],                 // Mobile web with cookies
+        ['web', ['--force-ipv4']],    // Force IPv4
+        ['android,web', []],          // Android skips cookies but web part uses them
+      ]
+    : [
+        ['android', []],              // No cookies needed, no PO token required
+        ['android,web', []],          // Combo fallback
+        ['tv', []],
+        ['mweb', []],
+        ['android_creator', []],
+        ['web', ['--force-ipv4']],
+      ];
 
   let strategyIndex = 0;
   let hasSentHeaders = false;
