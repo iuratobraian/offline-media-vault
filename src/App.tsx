@@ -156,7 +156,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col bg-[#070b14] text-slate-100 font-sans selection:bg-emerald-500/20 selection:text-emerald-300 overflow-hidden">
+    <div className="fixed inset-0 flex flex-col bg-[#070b14] text-slate-100 font-sans selection:bg-emerald-500/20 selection:text-emerald-300 overflow-hidden">
       {/* Top Navbar */}
       <Navbar
         onOpenAddModal={() => {
@@ -184,7 +184,7 @@ const AppContent: React.FC = () => {
         />
 
         {/* Main Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-5 pb-24 md:pb-6">
+        <main className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-5 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-6">
           <div className="mx-auto max-w-7xl">{renderActiveTab()}</div>
         </main>
       </div>

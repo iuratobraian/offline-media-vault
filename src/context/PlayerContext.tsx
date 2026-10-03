@@ -35,6 +35,7 @@ interface PlayerContextType {
   togglePiP: () => Promise<void>;
   registerVideoElement: (el: HTMLVideoElement | null) => void;
   reportVideoTimeUpdate: (time: number, totalDuration: number) => void;
+  setIsPlaying: (playing: boolean) => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
@@ -135,6 +136,58 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
   }, []);
+
+  // Synchronize audio for background playback when device is locked or app minimized
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      const isHidden = document.hidden;
+      const audio = audioElementRef.current;
+      const video = videoElementRef.current;
+
+      if (isHidden) {
+        // Device locked or app minimized
+        if (video && !video.paused) {
+          const time = video.currentTime;
+          if (audio) {
+            audio.src = video.src || activeBlobUrlRef.current || currentBlobUrl || '';
+            audio.currentTime = time;
+            audio.playbackRate = video.playbackRate;
+            audio.volume = video.volume;
+            try {
+              await audio.play();
+              setIsPlaying(true);
+              if ('mediaSession' in navigator) {
+                navigator.mediaSession.playbackState = 'playing';
+              }
+            } catch (e) {
+              console.warn('[BackgroundAudio] Play on lock error:', e);
+            }
+          }
+        }
+      } else {
+        // App returned to foreground
+        if (currentItem?.mediaType === 'video' && audio && !audio.paused && video) {
+          const time = audio.currentTime;
+          audio.pause();
+          video.currentTime = time;
+          try {
+            await video.play();
+            setIsPlaying(true);
+            if ('mediaSession' in navigator) {
+              navigator.mediaSession.playbackState = 'playing';
+            }
+          } catch (e) {
+            console.warn('[Foreground] Restore video play error:', e);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentItem, currentBlobUrl]);
 
   const registerVideoElement = (el: HTMLVideoElement | null) => {
     videoElementRef.current = el;
@@ -247,12 +300,38 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         audioElementRef.current.src = mediaSourceUrl;
         audioElementRef.current.playbackRate = playbackRate;
         audioElementRef.current.volume = isMuted ? 0 : volume;
+        if (savedPos > 0) audioElementRef.current.currentTime = savedPos;
         try {
           await audioElementRef.current.play();
           setIsPlaying(true);
+          if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
         } catch (err) {
           console.warn('Playback waiting for user gesture:', err);
         }
+      }
+    } else if (item.mediaType === 'video') {
+      // Auto-start video playback immediately
+      if (audioElementRef.current && (isItemOffline || !mediaSourceUrl.includes('youtube.com'))) {
+        audioElementRef.current.src = mediaSourceUrl;
+        audioElementRef.current.playbackRate = playbackRate;
+        audioElementRef.current.volume = isMuted ? 0 : volume;
+        if (savedPos > 0) audioElementRef.current.currentTime = savedPos;
+      }
+      if (videoElementRef.current) {
+        videoElementRef.current.src = mediaSourceUrl;
+        videoElementRef.current.playbackRate = playbackRate;
+        videoElementRef.current.volume = isMuted ? 0 : volume;
+        if (savedPos > 0) videoElementRef.current.currentTime = savedPos;
+        try {
+          await videoElementRef.current.play();
+          setIsPlaying(true);
+          if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+        } catch (err) {
+          console.warn('Video auto-playback waiting for user gesture:', err);
+        }
+      } else {
+        setIsPlaying(true);
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
       }
     }
 
@@ -281,18 +360,30 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!audio) return;
       if (isPlaying) {
         audio.pause();
+        setIsPlaying(false);
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
       } else {
-        audio.play().catch(console.warn);
+        audio.play().then(() => {
+          setIsPlaying(true);
+          if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+        }).catch(console.warn);
       }
     } else if (currentItem?.mediaType === 'video') {
       const video = videoElementRef.current;
-      if (!video) return;
+      const audio = audioElementRef.current;
       if (isPlaying) {
-        video.pause();
+        video?.pause();
+        audio?.pause();
         setIsPlaying(false);
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
       } else {
-        video.play().catch(console.warn);
+        if (document.hidden && audio) {
+          audio.play().catch(console.warn);
+        } else if (video) {
+          video.play().catch(console.warn);
+        }
         setIsPlaying(true);
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
       }
     }
   };
@@ -418,6 +509,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         togglePiP,
         registerVideoElement,
         reportVideoTimeUpdate,
+        setIsPlaying,
       }}
     >
       {children}

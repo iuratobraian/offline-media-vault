@@ -1,9 +1,10 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { handleYouTubeInfo, handleYouTubeStream, handleYouTubePlaylist, handleYouTubeSearch } from './src/server/youtubeBackend';
+import { handleYouTubeInfo, handleYouTubeStream, handleYouTubePlaylist, handleYouTubeSearch, ensureDefaultCookies } from './src/server/youtubeBackend';
 
 const app = express();
+ensureDefaultCookies();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
@@ -53,7 +54,13 @@ app.get('/api/youtube/search', (req, res) => {
 // Cookie management endpoint – save cookies.txt (Netscape format) for yt-dlp
 app.post('/api/youtube/cookies', express.text({ type: '*/*', limit: '2mb' }), (req, res) => {
   try {
-    const cookieText = req.body as string;
+    let cookieText = typeof req.body === 'string' ? req.body : req.body?.cookies || '';
+    if (typeof cookieText === 'string' && cookieText.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(cookieText);
+        if (parsed.cookies) cookieText = parsed.cookies;
+      } catch {}
+    }
     if (!cookieText || cookieText.trim().length < 20) {
       res.status(400).json({ success: false, error: 'Cookie text too short or empty' });
       return;

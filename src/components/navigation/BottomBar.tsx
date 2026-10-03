@@ -17,8 +17,8 @@ export const BottomBar: React.FC<BottomBarProps> = ({
   activeDownloadsCount,
 }) => {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 block md:hidden border-t border-white/10 bg-[#070b14]/95 backdrop-blur-2xl">
-      <div className="flex h-14 items-center justify-around px-2 pb-1 pt-0.5">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 block md:hidden border-t border-white/10 bg-[#070b14]/98 backdrop-blur-2xl pb-[env(safe-area-inset-bottom,0px)]">
+      <div className="flex h-14 items-center justify-around px-2 pt-0.5">
         {/* Inicio */}
         <button
           onClick={() => onSelectTab('dashboard')}

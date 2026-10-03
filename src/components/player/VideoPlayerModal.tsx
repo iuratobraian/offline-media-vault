@@ -48,6 +48,7 @@ export const VideoPlayerModal: React.FC = () => {
     togglePiP,
     registerVideoElement,
     reportVideoTimeUpdate,
+    setIsPlaying,
     playNext,
     playPrevious,
   } = usePlayer();
@@ -299,7 +300,7 @@ export const VideoPlayerModal: React.FC = () => {
           ) : isYouTubeOnline && ytId ? (
             <div className="relative h-full w-full flex flex-col items-center justify-center">
               <iframe
-                src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&enablejsapi=1`}
+                src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&enablejsapi=1&playsinline=1`}
                 title={currentItem.title}
                 className="h-full w-full border-0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -347,6 +348,7 @@ export const VideoPlayerModal: React.FC = () => {
               src={currentBlobUrl || undefined}
               className="h-full w-full object-contain cursor-pointer"
               playsInline
+              autoPlay
               onClick={togglePlayPause}
               onTimeUpdate={(e) => {
                 const target = e.currentTarget;
@@ -356,11 +358,18 @@ export const VideoPlayerModal: React.FC = () => {
                 const target = e.currentTarget;
                 target.playbackRate = playbackRate;
                 target.volume = isMuted ? 0 : volume;
+                target.play().catch(() => {});
               }}
-              onPlay={() => {}}
-              onPause={() => {}}
-              onEnded={() => {}}
-              autoPlay
+              onCanPlay={(e) => {
+                const target = e.currentTarget;
+                target.play().catch(() => {});
+              }}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => {
+                setIsPlaying(false);
+                playNext();
+              }}
             />
           )}
         </div>

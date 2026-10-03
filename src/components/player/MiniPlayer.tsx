@@ -46,7 +46,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onOpenFullPlayer }) => {
   };
 
   return (
-    <div className="fixed bottom-14 md:bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0e1424]/98 backdrop-blur-2xl shadow-2xl transition-all">
+    <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#0e1424]/98 backdrop-blur-2xl shadow-2xl transition-all">
       {/* Top thin interactive scrubber bar */}
       <div className="group relative -top-1 h-2 w-full cursor-pointer">
         <input
