@@ -280,7 +280,7 @@ export class YouTubeProvider implements MediaProvider {
     }
   }
 
-  async fetchPlaylist(urlStr: string): Promise<{ success: boolean; title: string; total: number; items: Array<{ id: string; title: string; duration: number; thumbnail: string; url: string }> }> {
+  async fetchPlaylist(urlStr: string): Promise<{ success: boolean; title?: string; total?: number; error?: string; items?: Array<{ id: string; title: string; duration: number; thumbnail: string; url: string }> }> {
     const baseUrl = getBackendBaseUrl();
     const endpoint = `${baseUrl}/api/youtube/playlist?url=${encodeURIComponent(urlStr)}`;
     const res = await fetch(endpoint, { signal: AbortSignal.timeout(30000) });

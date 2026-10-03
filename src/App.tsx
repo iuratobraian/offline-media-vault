@@ -184,7 +184,7 @@ const AppContent: React.FC = () => {
         />
 
         {/* Main Scrollable Viewport */}
-        <main className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-5">
+        <main className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-5 pb-24 md:pb-6">
           <div className="mx-auto max-w-7xl">{renderActiveTab()}</div>
         </main>
       </div>

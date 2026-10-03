@@ -409,6 +409,11 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
   const cacheFileName = `${videoId}_${formatKey}.${ext}`;
   const cacheFilePath = path.join(CACHE_DIR, cacheFileName);
 
+  const isInline = parsedUrl.searchParams.get('inline') === 'true' || parsedUrl.searchParams.get('play') === 'true';
+  const disposition = isInline
+    ? `inline; filename="${encodeURIComponent(downloadFileName)}"`
+    : `attachment; filename="${encodeURIComponent(downloadFileName)}"`;
+
   const serveCachedFile = () => {
     try {
       const stats = fs.statSync(cacheFilePath);
@@ -431,7 +436,7 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
           'Accept-Ranges': 'bytes',
           'Content-Length': end - start + 1,
           'Content-Type': mimeType,
-          'Content-Disposition': `inline; filename="${encodeURIComponent(downloadFileName)}"`,
+          'Content-Disposition': disposition,
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
         });
@@ -441,7 +446,7 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
           'Content-Length': totalSize,
           'Content-Type': mimeType,
           'Accept-Ranges': 'bytes',
-          'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadFileName)}"`,
+          'Content-Disposition': disposition,
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
         });
@@ -482,10 +487,10 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
         // For m4a and video, we can proxy the direct URL
         if (formatKey === 'audio_mp3') {
           // Proxy via ffmpeg for MP3 conversion
-          await streamViaFfmpeg(selectedFormat.url, res, downloadFileName, mimeType, cacheFilePath, req);
+          await streamViaFfmpeg(selectedFormat.url, res, downloadFileName, mimeType, cacheFilePath, req, disposition);
         } else {
           // Direct proxy: stream YouTube's CDN URL through our server
-          await proxyDirectUrl(selectedFormat.url, res, downloadFileName, mimeType, cacheFilePath, req);
+          await proxyDirectUrl(selectedFormat.url, res, downloadFileName, mimeType, cacheFilePath, req, disposition);
         }
         return;
       } catch (e: any) {
@@ -497,7 +502,7 @@ export async function handleYouTubeStream(req: IncomingMessage, res: ServerRespo
 
   // ─── Strategy 2: yt-dlp with multiple client fallbacks ──────────────────────
   console.log(`[stream] Falling back to yt-dlp for ${videoId}...`);
-  await streamViaYtDlp(videoId, canonicalUrl, formatKey, ext, mimeType, downloadFileName, cacheFilePath, req, res, ytDlp, nodePath);
+  await streamViaYtDlp(videoId, canonicalUrl, formatKey, ext, mimeType, downloadFileName, cacheFilePath, req, res, ytDlp, nodePath, disposition);
 }
 
 async function proxyDirectUrl(
@@ -506,7 +511,8 @@ async function proxyDirectUrl(
   downloadFileName: string,
   mimeType: string,
   cacheFilePath: string,
-  req: IncomingMessage
+  req: IncomingMessage,
+  disposition: string = `attachment; filename="${encodeURIComponent(downloadFileName)}"`
 ): Promise<void> {
   const fetchHeaders: Record<string, string> = {
     'User-Agent': 'com.google.android.youtube/19.30.36 (Linux; U; Android 14) gzip',
@@ -535,7 +541,7 @@ async function proxyDirectUrl(
 
   const outHeaders: Record<string, string | number> = {
     'Content-Type': mimeType,
-    'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadFileName)}"`,
+    'Content-Disposition': disposition,
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
     'Accept-Ranges': 'bytes',
@@ -582,7 +588,8 @@ async function streamViaFfmpeg(
   downloadFileName: string,
   mimeType: string,
   cacheFilePath: string,
-  req: IncomingMessage
+  req: IncomingMessage,
+  disposition: string = `attachment; filename="${encodeURIComponent(downloadFileName)}"`
 ): Promise<void> {
   const cacheTempPath = cacheFilePath + '.tmp';
 
@@ -611,7 +618,7 @@ async function streamViaFfmpeg(
       hasSentHeaders = true;
       res.writeHead(200, {
         'Content-Type': mimeType,
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadFileName)}"`,
+        'Content-Disposition': disposition,
         'Access-Control-Allow-Origin': '*',
         'Transfer-Encoding': 'chunked',
       });
@@ -657,7 +664,8 @@ async function streamViaYtDlp(
   req: IncomingMessage,
   res: ServerResponse,
   ytDlp: string,
-  nodePath: string
+  nodePath: string,
+  disposition: string = `attachment; filename="${encodeURIComponent(downloadFileName)}"`
 ): Promise<void> {
   const hasCookies = !!process.env.YOUTUBE_COOKIES || fs.existsSync(path.join(process.cwd(), 'cookies.txt'));
 
@@ -770,7 +778,7 @@ async function streamViaYtDlp(
         console.log(`[yt-dlp] Client "${currentClient}" streaming ${formatKey}...`);
         res.writeHead(200, {
           'Content-Type': mimeType,
-          'Content-Disposition': `attachment; filename="${encodeURIComponent(downloadFileName)}"`,
+          'Content-Disposition': disposition,
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Disposition',
           'Transfer-Encoding': 'chunked',
@@ -813,7 +821,7 @@ async function streamViaYtDlp(
 
 export async function handleYouTubePlaylist(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
-  const targetUrl = parsedUrl.searchParams.get('url');
+  let targetUrl = parsedUrl.searchParams.get('url');
 
   if (!targetUrl) {
     res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -821,24 +829,48 @@ export async function handleYouTubePlaylist(req: IncomingMessage, res: ServerRes
     return;
   }
 
+  targetUrl = targetUrl.trim();
+
+  // Normalize URL: If it has list=PL... normalize, but keep RD mixes as watch?v=...&list=RD...
+  let normalizedUrl = targetUrl;
+  try {
+    const u = new URL(targetUrl);
+    const listId = u.searchParams.get('list');
+    if (listId && !listId.startsWith('RD') && !u.pathname.includes('/playlist')) {
+      normalizedUrl = `https://www.youtube.com/playlist?list=${listId}`;
+    }
+  } catch {}
+
   const ytDlp = findYtDlpPath();
-  const args = ['--flat-playlist', '--dump-single-json', '--no-warnings'];
+  const args = [
+    '--flat-playlist',
+    '--dump-single-json',
+    '--yes-playlist',
+    '--playlist-end', '50',
+    '--extractor-args', 'youtube:player_client=android,web',
+    '--no-warnings'
+  ];
 
   const cookiePath = path.join(process.cwd(), 'cookies.txt');
   if (fs.existsSync(cookiePath)) {
     args.push('--cookies', cookiePath);
   }
 
-  args.push(targetUrl);
+  args.push(normalizedUrl);
 
   const proc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
 
+  const timeoutTimer = setTimeout(() => {
+    try { proc.kill('SIGTERM'); } catch {}
+  }, 25000);
+
   proc.stdout.on('data', (d) => { stdout += d.toString(); });
   proc.stderr.on('data', (d) => { stderr += d.toString(); });
 
   proc.on('close', () => {
+    clearTimeout(timeoutTimer);
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
@@ -847,16 +879,46 @@ export async function handleYouTubePlaylist(req: IncomingMessage, res: ServerRes
       const data = JSON.parse(stdout);
       const title = data.title || 'Playlist de YouTube';
       const entries = data.entries || [];
-      const items = entries.map((e: any) => ({
-        id: e.id,
-        title: e.title || `Video ${e.id}`,
-        duration: e.duration || 0,
-        thumbnail: e.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`,
-        url: `https://www.youtube.com/watch?v=${e.id}`,
-      }));
+      
+      let items = entries
+        .filter((e: any) => e && e.id && e.title && !e.title.includes('[Deleted video]') && !e.title.includes('[Private video]'))
+        .map((e: any) => {
+          const thumbs = e.thumbnails || [];
+          const bestThumb = thumbs.length > 0 ? (thumbs[thumbs.length - 1]?.url || thumbs[0]?.url) : `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`;
+          return {
+            id: e.id,
+            title: e.title || `Video ${e.id}`,
+            duration: e.duration || 0,
+            thumbnail: bestThumb,
+            url: `https://www.youtube.com/watch?v=${e.id}`,
+          };
+        });
+
+      // If entries was empty but data has a direct id (single video passed or fallback)
+      if (items.length === 0 && data.id) {
+        items = [{
+          id: data.id,
+          title: data.title || 'Video de YouTube',
+          duration: data.duration || 0,
+          thumbnail: data.thumbnail || data.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${data.id}/hqdefault.jpg`,
+          url: `https://www.youtube.com/watch?v=${data.id}`,
+        }];
+      }
+
+      if (items.length === 0) {
+        res.end(JSON.stringify({
+          success: false,
+          error: stderr ? `No se encontraron videos: ${stderr.slice(-150)}` : 'La lista está vacía o es privada.'
+        }));
+        return;
+      }
+
       res.end(JSON.stringify({ success: true, title, total: items.length, items }));
-    } catch (e: any) {
-      res.end(JSON.stringify({ success: false, error: 'No se pudo leer la playlist. ' + stderr.slice(-200) }));
+    } catch {
+      res.end(JSON.stringify({
+        success: false,
+        error: stderr ? `Error al leer la playlist: ${stderr.slice(-200)}` : 'No se pudo procesar la lista de reproducción.'
+      }));
     }
   });
 }
@@ -864,7 +926,7 @@ export async function handleYouTubePlaylist(req: IncomingMessage, res: ServerRes
 export async function handleYouTubeSearch(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
   const q = parsedUrl.searchParams.get('q') || '';
-  const limit = Math.min(parseInt(parsedUrl.searchParams.get('limit') || '6', 10), 20);
+  const limit = Math.min(parseInt(parsedUrl.searchParams.get('limit') || '8', 10), 20);
 
   if (!q.trim()) {
     res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -873,7 +935,13 @@ export async function handleYouTubeSearch(req: IncomingMessage, res: ServerRespo
   }
 
   const ytDlp = findYtDlpPath();
-  const args = ['--flat-playlist', '--dump-single-json', '--no-warnings', `ytsearch${limit}:${q}`];
+  const args = [
+    '--flat-playlist',
+    '--dump-single-json',
+    '--no-warnings',
+    '--extractor-args', 'youtube:player_client=android,web',
+    `ytsearch${limit}:${q}`
+  ];
 
   const cookiePath = path.join(process.cwd(), 'cookies.txt');
   if (fs.existsSync(cookiePath)) {
@@ -884,10 +952,15 @@ export async function handleYouTubeSearch(req: IncomingMessage, res: ServerRespo
   let stdout = '';
   let stderr = '';
 
+  const timeoutTimer = setTimeout(() => {
+    try { proc.kill('SIGTERM'); } catch {}
+  }, 15000);
+
   proc.stdout.on('data', (d) => { stdout += d.toString(); });
   proc.stderr.on('data', (d) => { stderr += d.toString(); });
 
   proc.on('close', () => {
+    clearTimeout(timeoutTimer);
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
@@ -895,13 +968,20 @@ export async function handleYouTubeSearch(req: IncomingMessage, res: ServerRespo
     try {
       const data = JSON.parse(stdout);
       const entries = data.entries || [];
-      const items = entries.map((e: any) => ({
-        id: e.id,
-        title: e.title,
-        duration: e.duration || 0,
-        thumbnail: e.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`,
-        url: `https://www.youtube.com/watch?v=${e.id}`,
-      }));
+      const items = entries
+        .filter((e: any) => e && e.id && e.title)
+        .map((e: any) => {
+          const thumbs = e.thumbnails || [];
+          const bestThumb = thumbs.length > 0 ? (thumbs[thumbs.length - 1]?.url || thumbs[0]?.url) : `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`;
+          return {
+            id: e.id,
+            title: e.title,
+            duration: e.duration || 0,
+            thumbnail: bestThumb,
+            url: `https://www.youtube.com/watch?v=${e.id}`,
+            channel: e.channel || e.uploader || '',
+          };
+        });
       res.end(JSON.stringify({ success: true, items }));
     } catch {
       res.end(JSON.stringify({ success: false, error: 'Error al buscar en YouTube' }));

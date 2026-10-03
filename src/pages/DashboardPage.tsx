@@ -28,7 +28,10 @@ import {
   ListMusic,
   ExternalLink,
   SlidersHorizontal,
+  X,
+  Loader2,
 } from 'lucide-react';
+import { getBackendBaseUrl } from '../services/providers/YouTubeProvider';
 
 interface DashboardPageProps {
   onOpenAddModal: () => void;
@@ -62,6 +65,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
 
+  // YouTube online search results from main search bar
+  const [youtubeSearchResults, setYoutubeSearchResults] = useState<Array<{ id: string; title: string; duration: number; thumbnail: string; url: string; channel?: string }>>([]);
+  const [isSearchingYouTube, setIsSearchingYouTube] = useState(false);
+
   // Suggested music based on user's musical interests
   const [suggestedTracks, setSuggestedTracks] = useState<Array<{ id: string; title: string; duration: number; thumbnail: string; url: string }>>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -87,7 +94,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     if (!term) return;
     setLoadingSuggestions(true);
     try {
-      const results = await youTubeProvider.search(term, 6);
+      const results = await youTubeProvider.search(term, 8);
       setSuggestedTracks(results);
     } catch {
       setSuggestedTracks([]);
@@ -95,6 +102,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       setLoadingSuggestions(false);
     }
   };
+
+  // YouTube online search with automatic debounce from the search bar
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setYoutubeSearchResults([]);
+      setIsSearchingYouTube(false);
+      return;
+    }
+
+    setIsSearchingYouTube(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await youTubeProvider.search(q, 8);
+        setYoutubeSearchResults(results);
+      } catch {
+        setYoutubeSearchResults([]);
+      } finally {
+        setIsSearchingYouTube(false);
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const handleToggleViewMode = () => {
     const next = viewMode === 'list' ? 'grid' : 'list';
@@ -189,82 +220,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     playItem(list[0], list);
   };
 
-  // Quick download suggested YouTube item
-  const handleDownloadSuggested = async (suggested: { id: string; title: string; duration: number; thumbnail: string; url: string }) => {
-    const canonicalUrl = `https://www.youtube.com/watch?v=${suggested.id}`;
-    const streamUrl = `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_mp3&title=${encodeURIComponent(suggested.title)}`;
-
-    const formatOption: MediaFormatOption = {
-      id: 'yt_audio_mp3',
-      type: 'audio',
-      label: 'MP3 Alta Calidad',
-      quality: '320 kbps',
-      format: 'MP3',
-      ext: '.mp3',
-      mimeType: 'audio/mpeg',
-      url: streamUrl,
-      supportsRangeRequests: true,
-    };
-
+  // Play YouTube online video (in-place playback directly in player)
+  const handlePlayOnlineVideo = (video: { id: string; title: string; duration: number; thumbnail: string; url: string }) => {
+    const canonicalUrl = `https://www.youtube.com/watch?v=${video.id}`;
     const mediaItem: MediaItem = {
-      id: `yt_${suggested.id}`,
-      title: suggested.title,
-      thumbnail: suggested.thumbnail || `https://i.ytimg.com/vi/${suggested.id}/hqdefault.jpg`,
-      duration: suggested.duration || 0,
+      id: `yt_online_${video.id}`,
+      title: video.title,
+      thumbnail: video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`,
+      duration: video.duration || 0,
       sourceUrl: canonicalUrl,
       originalUrl: canonicalUrl,
       provider: 'youtube',
       source: 'youtube',
-      mediaType: 'audio',
-      mimeType: 'audio/mpeg',
-      format: 'MP3',
-      quality: '320 kbps',
+      mediaType: 'video',
+      mimeType: 'video/mp4',
+      format: 'Online',
+      quality: 'YouTube HD',
       size: 0,
       fileSize: 0,
-      fileName: `${suggested.title.replace(/[/\\?%*:|"<>]/g, '_')}.mp3`,
+      fileName: `${video.title}.mp4`,
       hasLocalBlob: false,
       isOffline: false,
-      category: 'musica',
-      tags: ['#youtube', '#musica'],
-      favorite: false,
-      downloadStatus: 'preparing',
-      createdAt: Date.now(),
-      progress: 0,
-      canDownload: true,
-      canStreamOffline: false,
-      requiresOnlinePlayback: false,
-      explanation: 'Descargando música sugerida...',
-    };
-
-    await addMedia(mediaItem);
-    startDownload(mediaItem, formatOption);
-  };
-
-  // Play online stream of suggested track
-  const handlePlaySuggestedOnline = (suggested: { id: string; title: string; duration: number; thumbnail: string; url: string }) => {
-    const canonicalUrl = `https://www.youtube.com/watch?v=${suggested.id}`;
-    const streamUrl = `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_mp3&title=${encodeURIComponent(suggested.title)}`;
-
-    const mediaItem: MediaItem = {
-      id: `yt_online_${suggested.id}`,
-      title: suggested.title,
-      thumbnail: suggested.thumbnail || `https://i.ytimg.com/vi/${suggested.id}/hqdefault.jpg`,
-      duration: suggested.duration || 0,
-      sourceUrl: canonicalUrl,
-      originalUrl: canonicalUrl,
-      provider: 'youtube',
-      source: 'youtube',
-      mediaType: 'audio',
-      mimeType: 'audio/mpeg',
-      format: 'MP3',
-      quality: 'Online',
-      size: 0,
-      fileSize: 0,
-      fileName: `${suggested.title}.mp3`,
-      hasLocalBlob: false,
-      isOffline: false,
-      category: 'musica',
-      tags: ['#stream'],
+      category: 'videos',
+      tags: ['#youtube', '#online'],
       favorite: false,
       downloadStatus: 'not_downloaded',
       createdAt: Date.now(),
@@ -273,8 +251,109 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       canStreamOffline: false,
       requiresOnlinePlayback: true,
     };
-
     playItem(mediaItem);
+  };
+
+  // Play YouTube online audio (direct stream proxy for background/miniplayer)
+  const handlePlayOnlineAudio = (video: { id: string; title: string; duration: number; thumbnail: string; url: string }) => {
+    const canonicalUrl = `https://www.youtube.com/watch?v=${video.id}`;
+    const baseUrl = getBackendBaseUrl();
+    const streamUrl = `${baseUrl}/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_m4a&inline=true`;
+
+    const mediaItem: MediaItem = {
+      id: `yt_online_audio_${video.id}`,
+      title: video.title,
+      thumbnail: video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`,
+      duration: video.duration || 0,
+      sourceUrl: streamUrl,
+      originalUrl: canonicalUrl,
+      provider: 'youtube',
+      source: 'youtube',
+      mediaType: 'audio',
+      mimeType: 'audio/mp4',
+      format: 'M4A',
+      quality: 'Online Audio',
+      size: 0,
+      fileSize: 0,
+      fileName: `${video.title}.m4a`,
+      hasLocalBlob: false,
+      isOffline: false,
+      category: 'musica',
+      tags: ['#youtube', '#audio'],
+      favorite: false,
+      downloadStatus: 'not_downloaded',
+      createdAt: Date.now(),
+      progress: 0,
+      canDownload: true,
+      canStreamOffline: false,
+      requiresOnlinePlayback: true,
+    };
+    playItem(mediaItem);
+  };
+
+  // Quick download an online YouTube video or audio
+  const handleDownloadOnlineItem = async (
+    video: { id: string; title: string; duration: number; thumbnail: string; url: string },
+    type: 'audio' | 'video' = 'audio'
+  ) => {
+    const canonicalUrl = `https://www.youtube.com/watch?v=${video.id}`;
+    const formatKey = type === 'audio' ? 'audio_mp3' : 'video_720p';
+    const baseUrl = getBackendBaseUrl();
+    const streamUrl = `${baseUrl}/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=${formatKey}&title=${encodeURIComponent(video.title)}`;
+
+    const formatOption: MediaFormatOption = {
+      id: type === 'audio' ? 'yt_audio_mp3' : 'yt_video_720p',
+      type,
+      label: type === 'audio' ? 'MP3 Alta Calidad' : '720p HD MP4',
+      quality: type === 'audio' ? '320 kbps' : '720p',
+      format: type === 'audio' ? 'MP3' : 'MP4',
+      ext: type === 'audio' ? '.mp3' : '.mp4',
+      mimeType: type === 'audio' ? 'audio/mpeg' : 'video/mp4',
+      url: streamUrl,
+      supportsRangeRequests: true,
+    };
+
+    const mediaItem: MediaItem = {
+      id: `yt_${video.id}`,
+      title: video.title,
+      thumbnail: video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`,
+      duration: video.duration || 0,
+      sourceUrl: canonicalUrl,
+      originalUrl: canonicalUrl,
+      provider: 'youtube',
+      source: 'youtube',
+      mediaType: type,
+      mimeType: type === 'audio' ? 'audio/mpeg' : 'video/mp4',
+      format: type === 'audio' ? 'MP3' : 'MP4',
+      quality: type === 'audio' ? '320 kbps' : '720p',
+      size: 0,
+      fileSize: 0,
+      fileName: `${video.title.replace(/[/\\?%*:|"<>]/g, '_')}.${type === 'audio' ? 'mp3' : 'mp4'}`,
+      hasLocalBlob: false,
+      isOffline: false,
+      category: type === 'audio' ? 'musica' : 'videos',
+      tags: ['#youtube', type === 'audio' ? '#musica' : '#videos'],
+      favorite: false,
+      downloadStatus: 'preparing',
+      createdAt: Date.now(),
+      progress: 0,
+      canDownload: true,
+      canStreamOffline: false,
+      requiresOnlinePlayback: false,
+      explanation: `Descargando ${type === 'audio' ? 'música' : 'video'}...`,
+    };
+
+    await addMedia(mediaItem);
+    startDownload(mediaItem, formatOption);
+  };
+
+  // Play suggested track online (opens video player so user can watch it immediately)
+  const handlePlaySuggestedOnline = (suggested: { id: string; title: string; duration: number; thumbnail: string; url: string }) => {
+    handlePlayOnlineVideo(suggested);
+  };
+
+  const handleDownloadSuggested = async (suggested: { id: string; title: string; duration: number; thumbnail: string; url: string }) => {
+    await handleDownloadOnlineItem(suggested, 'audio');
   };
 
   const showMusicSection = activeFilter === 'all' || activeFilter === 'music' || activeFilter === 'favorites' || activeFilter === 'recent' || activeFilter === 'playlists';
@@ -370,9 +449,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar canción o artista..."
-              className="w-full rounded-xl border border-white/10 bg-white/5 py-1.5 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+              placeholder="Buscar en biblioteca o en YouTube..."
+              className="w-full rounded-xl border border-white/10 bg-white/5 py-1.5 pl-9 pr-8 text-xs text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
+                title="Limpiar búsqueda"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Filter Pills */}
@@ -499,6 +587,116 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
+          YOUTUBE ONLINE SEARCH RESULTS (EN EL BUSCADOR)
+          ───────────────────────────────────────────────────────────── */}
+      {searchQuery.trim().length >= 2 && (
+        <section className="space-y-3 rounded-3xl border border-red-500/25 bg-gradient-to-b from-red-500/10 via-[#0e1424] to-[#070b14] p-4 sm:p-5 shadow-2xl animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-red-600 text-white shadow-md">
+                <Video className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <span>Videos en YouTube</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                    En línea
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  {isSearchingYouTube
+                    ? 'Buscando videos en YouTube...'
+                    : youtubeSearchResults.length > 0
+                    ? `Encontrados ${youtubeSearchResults.length} videos listos para ver o descargar`
+                    : 'Buscando en YouTube...'}
+                </p>
+              </div>
+            </div>
+
+            {isSearchingYouTube && (
+              <Loader2 className="h-5 w-5 animate-spin text-red-400" />
+            )}
+          </div>
+
+          {youtubeSearchResults.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+              {youtubeSearchResults.map((video) => (
+                <div
+                  key={video.id}
+                  className="group flex flex-col rounded-2xl border border-white/10 bg-[#0a0f1d] p-2.5 hover:border-red-500/40 hover:bg-[#0e1424] transition shadow-lg"
+                >
+                  <div
+                    onClick={() => handlePlayOnlineVideo(video)}
+                    className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-900 cursor-pointer"
+                  >
+                    <img
+                      src={video.thumbnail}
+                      alt={video.title}
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                    {video.duration > 0 && (
+                      <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/80 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                        {formatDuration(video.duration)}
+                      </span>
+                    )}
+                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-600/90 text-white shadow-xl group-hover:scale-110 active:scale-95 transition">
+                        <Play className="h-5 w-5 fill-current ml-0.5" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 flex-1 min-w-0">
+                    <h4
+                      onClick={() => handlePlayOnlineVideo(video)}
+                      className="line-clamp-2 text-xs font-bold text-white group-hover:text-red-300 transition cursor-pointer"
+                      title={video.title}
+                    >
+                      {video.title}
+                    </h4>
+                    {video.channel && (
+                      <p className="mt-0.5 text-[11px] text-slate-400 truncate">{video.channel}</p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-2 border-t border-white/5 flex items-center gap-1.5">
+                    <button
+                      onClick={() => handlePlayOnlineVideo(video)}
+                      className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 py-1.5 text-xs font-semibold transition active:scale-95"
+                      title="Ver video ahora"
+                    >
+                      <Play className="h-3 w-3 fill-current" />
+                      <span>Ver video</span>
+                    </button>
+                    <button
+                      onClick={() => handlePlayOnlineAudio(video)}
+                      className="flex items-center justify-center gap-1 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 px-2 py-1.5 text-xs font-semibold transition active:scale-95"
+                      title="Escuchar audio"
+                    >
+                      <Music className="h-3 w-3" />
+                      <span>Audio</span>
+                    </button>
+                    <button
+                      onClick={() => handleDownloadOnlineItem(video, 'video')}
+                      className="flex items-center justify-center rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 px-2.5 py-1.5 text-xs font-semibold transition active:scale-95"
+                      title="Descargar offline"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !isSearchingYouTube ? (
+            <div className="text-center py-4 text-xs text-slate-400">
+              No se encontraron videos para "{searchQuery}".
+            </div>
+          ) : null}
+        </section>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
           3. RECOMENDADO PARA TI (SEGÚN TUS GUSTOS MUSICALES)
           ───────────────────────────────────────────────────────────── */}
       {userInterests.length > 0 && suggestedTracks.length > 0 && (
@@ -546,42 +744,46 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 key={tr.id}
                 className="group relative flex flex-col rounded-2xl border border-white/5 bg-[#0b0f19] p-2 hover:border-emerald-500/40 hover:bg-[#0e1424] transition overflow-hidden"
               >
-                {/* Thumbnail */}
-                <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-800">
+                {/* Thumbnail with direct Play Video */}
+                <div
+                  onClick={() => handlePlayOnlineVideo(tr)}
+                  className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-800 cursor-pointer"
+                >
                   <img
                     src={tr.thumbnail}
                     alt={tr.title}
                     className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
                   />
-                  {/* Play & Download overlay buttons */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button
-                      onClick={() => handlePlaySuggestedOnline(tr)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-lg hover:scale-110 active:scale-95 transition"
-                      title="Escuchar online"
-                    >
+                  {/* Play overlay button */}
+                  <div className="absolute inset-0 bg-black/25 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-xl group-hover:scale-110 active:scale-95 transition">
                       <Play className="h-4 w-4 fill-current ml-0.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDownloadSuggested(tr)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-md hover:bg-emerald-500 hover:text-slate-950 transition"
-                      title="Descargar offline"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
+                    </div>
                   </div>
                 </div>
 
-                <h4 className="mt-2 line-clamp-1 text-xs font-semibold text-white group-hover:text-emerald-300">
+                <h4
+                  onClick={() => handlePlayOnlineVideo(tr)}
+                  className="mt-2 line-clamp-1 text-xs font-semibold text-white group-hover:text-emerald-300 transition cursor-pointer"
+                  title={tr.title}
+                >
                   {tr.title}
                 </h4>
 
-                <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-                  <span>{tr.duration > 0 ? formatDuration(tr.duration) : 'YouTube'}</span>
+                <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
+                  <button
+                    onClick={() => handlePlayOnlineAudio(tr)}
+                    className="flex items-center gap-0.5 rounded-md bg-white/5 hover:bg-white/10 px-1.5 py-0.5 text-slate-300 hover:text-white transition"
+                    title="Escuchar audio en segundo plano"
+                  >
+                    <Music className="h-3 w-3 text-indigo-400" />
+                    <span>Audio</span>
+                  </button>
                   <button
                     onClick={() => handleDownloadSuggested(tr)}
-                    className="text-emerald-400 hover:underline flex items-center gap-0.5"
+                    className="flex items-center gap-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 px-1.5 py-0.5 text-emerald-400 font-semibold transition"
+                    title="Descargar offline"
                   >
                     <Download className="h-3 w-3" />
                     <span>Bajar</span>

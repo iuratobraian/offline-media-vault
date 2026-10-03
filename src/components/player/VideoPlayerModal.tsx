@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   SkipBack,
   SkipForward,
+  Video,
 } from 'lucide-react';
 import { extractYouTubeId, extractVimeoId } from '../../services/analyzer';
 
@@ -57,6 +58,12 @@ export const VideoPlayerModal: React.FC = () => {
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [forceShowYouTubeVideo, setForceShowYouTubeVideo] = useState(false);
+
+  // Reset video toggle on track change
+  useEffect(() => {
+    setForceShowYouTubeVideo(false);
+  }, [currentItem?.id]);
 
   // Sync video ref with PlayerContext
   useEffect(() => {
@@ -216,7 +223,7 @@ export const VideoPlayerModal: React.FC = () => {
           )}
 
           {/* Audio Player Screen */}
-          {currentItem.mediaType === 'audio' ? (
+          {currentItem.mediaType === 'audio' && !forceShowYouTubeVideo ? (
             <div className="flex flex-col items-center justify-center p-6 text-center space-y-5 max-w-md mx-auto my-auto animate-fade-in">
               {/* Album Art with Ambient Glow */}
               <div className="relative group">
@@ -258,6 +265,19 @@ export const VideoPlayerModal: React.FC = () => {
                 <p className="text-xs text-slate-400">
                   {currentItem.category?.toUpperCase() || 'MÚSICA'}
                 </p>
+
+                {/* Direct button to watch YouTube video if track is from YouTube */}
+                {isYouTubeOnline && ytId && (
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setForceShowYouTubeVideo(true)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-500 px-4 py-2 text-xs font-bold text-white shadow-xl shadow-red-600/30 transition active:scale-95"
+                    >
+                      <Video className="h-4 w-4" />
+                      <span>Ver video de YouTube</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Visualizer wave bars animation when playing */}
@@ -290,14 +310,24 @@ export const VideoPlayerModal: React.FC = () => {
                   <ShieldAlert className="h-3.5 w-3.5" />
                   Reproducción online oficial de YouTube.
                 </span>
-                <a
-                  href={currentItem.sourceUrl || currentItem.originalUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 underline text-white hover:text-emerald-400"
-                >
-                  Abrir enlace <ExternalLink className="h-3 w-3" />
-                </a>
+                <div className="flex items-center gap-2">
+                  {currentItem.mediaType === 'audio' && (
+                    <button
+                      onClick={() => setForceShowYouTubeVideo(false)}
+                      className="rounded-lg bg-white/20 px-2 py-0.5 text-[10px] text-white hover:bg-white/30 transition"
+                    >
+                      Modo carátula
+                    </button>
+                  )}
+                  <a
+                    href={currentItem.sourceUrl || currentItem.originalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 underline text-white hover:text-emerald-400"
+                  >
+                    Abrir enlace <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
               </div>
             </div>
           ) : isVimeoOnline && vimeoId ? (

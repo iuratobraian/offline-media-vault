@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useMedia } from '../../context/MediaContext';
-import { youTubeProvider } from '../../services/providers/YouTubeProvider';
+import { youTubeProvider, getBackendBaseUrl } from '../../services/providers/YouTubeProvider';
 import { MediaItem, MediaFormatOption } from '../../types/media';
 import {
   ListMusic,
@@ -65,7 +65,7 @@ export const YouTubePlaylistModal: React.FC<YouTubePlaylistModalProps> = ({
           // By default, select all items as requested by user
           setSelectedIds(new Set(res.items.map((it) => it.id)));
         } else {
-          setError('No se pudieron encontrar videos en esta lista de reproducción.');
+          setError(res.error || 'No se pudieron encontrar videos en esta lista de reproducción.');
         }
       })
       .catch((err) => {
@@ -111,7 +111,8 @@ export const YouTubePlaylistModal: React.FC<YouTubePlaylistModalProps> = ({
       for (const item of selectedItems) {
         const canonicalUrl = `https://www.youtube.com/watch?v=${item.id}`;
         const formatKey = formatType === 'audio' ? 'audio_mp3' : 'video_720p';
-        const streamUrl = `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=${formatKey}&title=${encodeURIComponent(item.title)}`;
+        const baseUrl = getBackendBaseUrl();
+        const streamUrl = `${baseUrl}/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=${formatKey}&title=${encodeURIComponent(item.title)}`;
 
         const formatOption: MediaFormatOption = {
           id: formatType === 'audio' ? 'yt_audio_mp3' : 'yt_video_720p',

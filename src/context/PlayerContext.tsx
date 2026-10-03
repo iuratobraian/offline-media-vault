@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { MediaItem } from '../types/media';
 import { getMediaBlob, updateMediaItem } from '../database/db';
 import { updateMediaSession, updateMediaSessionPositionState } from '../services/mediaSession';
+import { getBackendBaseUrl } from '../services/providers/YouTubeProvider';
 
 interface PlayerContextType {
   // Current playing track/video
@@ -210,6 +211,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Fallback to original online URL only if item is not offline
     if (!mediaSourceUrl) {
       mediaSourceUrl = item.sourceUrl || item.originalUrl;
+    }
+
+    // If online YouTube audio, set to direct stream URL so <audio> can decode it
+    if (
+      item.mediaType === 'audio' &&
+      !isItemOffline &&
+      (item.source === 'youtube' || item.provider === 'youtube') &&
+      (!mediaSourceUrl || mediaSourceUrl.includes('youtube.com') || mediaSourceUrl.includes('youtu.be'))
+    ) {
+      const backendUrl = getBackendBaseUrl();
+      const canonicalUrl = item.sourceUrl || item.originalUrl;
+      mediaSourceUrl = `${backendUrl}/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_m4a&inline=true`;
     }
 
     setCurrentBlobUrl(mediaSourceUrl);
