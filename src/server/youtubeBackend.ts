@@ -722,24 +722,23 @@ async function streamViaYtDlp(
     } else if (formatKey === 'video_360p') {
       args.push('-f', '134+140/18/bestvideo[height<=360]+bestaudio/best');
     } else if (formatKey === 'video_1080p') {
-      args.push('-f', '137+140/bestvideo[height<=1080]+bestaudio/best[height<=1080]/18/best');
+      args.push('-f', '137+140/22/bestvideo[height<=1080]+bestaudio/best[height<=1080]/18/best');
     } else {
       // 720p default
-      args.push('-f', '136+140/22/bestvideo[height<=720]+bestaudio/18/best');
+      args.push('-f', '22/136+140/bestvideo[height<=720]+bestaudio/18/best');
     }
 
     args.push(...extraFlags);
     return args;
   };
 
-  // Android-based embedded clients work without cookies or PO token on cloud IPs
+  // Modern yt-dlp client strategies: visionos does not require JS engines or PO tokens
   const clientStrategies: { client: string; useCookies: boolean; extraArgs: string[] }[] = [
-    { client: 'android_embedded', useCookies: false, extraArgs: [] },
-    { client: 'android_creator', useCookies: false, extraArgs: [] },
-    { client: 'tv_embedded', useCookies: false, extraArgs: [] },
-    { client: 'android,web', useCookies: false, extraArgs: [] },
-    { client: 'tv', useCookies: hasCookies, extraArgs: [] },
+    { client: 'visionos', useCookies: false, extraArgs: [] },
+    { client: 'visionos,android', useCookies: false, extraArgs: [] },
+    { client: 'android', useCookies: false, extraArgs: [] },
     { client: 'web', useCookies: hasCookies, extraArgs: [] },
+    { client: 'mweb', useCookies: hasCookies, extraArgs: [] },
   ];
 
   let strategyIndex = 0;
@@ -769,6 +768,7 @@ async function streamViaYtDlp(
     let ffmpegProc: any = null;
     let activeStream: NodeJS.ReadableStream | null = null;
     let strategyTimeout: NodeJS.Timeout | null = null;
+    const isVideoTranscode = formatKey.startsWith('video_');
 
     try {
       ytProc = spawn(ytDlp, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -778,14 +778,15 @@ async function streamViaYtDlp(
       return;
     }
 
-    // Set a 10s watchdog: if no data chunk received within 10s, abort this strategy
+    // Set a 30s watchdog: allows enough time for cloud latency and transcoding
     strategyTimeout = setTimeout(() => {
       if (!hasSentHeaders) {
-        console.warn(`[yt-dlp] Strategy "${currentClient}" timed out after 10s with no data, trying next...`);
-        try { ytProc?.kill('SIGTERM'); } catch {}
-        try { ffmpegProc?.kill('SIGTERM'); } catch {}
+        console.warn(`[yt-dlp] Strategy "${currentClient}" timed out after 30s with no data, trying next...`);
+        cleanup();
+        try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
+        tryNextStrategy();
       }
-    }, 10000);
+    }, 30000);
 
     if (isMp3Transcode) {
       // Pipe yt-dlp AAC output through ffmpeg to produce MP3 on the fly
@@ -797,7 +798,7 @@ async function streamViaYtDlp(
           '-q:a', '2',
           '-f', 'mp3',
           'pipe:1',
-        ], { stdio: ['pipe', 'pipe', 'ignore'] });
+        ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
         ytProc.stdout.pipe(ffmpegProc.stdin);
         activeStream = ffmpegProc.stdout;
@@ -805,8 +806,32 @@ async function streamViaYtDlp(
         console.warn('[yt-dlp] Failed to spawn ffmpeg transcode, falling back to direct stream:', e.message);
         activeStream = ytProc.stdout;
       }
+    } else if (isVideoTranscode) {
+      // Remux mpegts / progressive video to streamable fragmented MP4
+      try {
+        ffmpegProc = spawn('ffmpeg', [
+          '-i', 'pipe:0',
+          '-c', 'copy',
+          '-bsf:a', 'aac_adtstoasc',
+          '-f', 'mp4',
+          '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+          'pipe:1',
+        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+        ytProc.stdout.pipe(ffmpegProc.stdin);
+        activeStream = ffmpegProc.stdout;
+      } catch (e: any) {
+        console.warn('[yt-dlp] Failed to spawn ffmpeg video remux, falling back to direct stream:', e.message);
+        activeStream = ytProc.stdout;
+      }
     } else {
       activeStream = ytProc.stdout;
+    }
+
+    if (ffmpegProc) {
+      ffmpegProc.stdin.on('error', () => {});
+      ytProc.stdout.on('error', () => {});
+      ffmpegProc.stderr.on('data', () => {});
     }
 
     const cleanup = () => {
@@ -846,11 +871,46 @@ async function streamViaYtDlp(
       try { cacheWriteStream?.write(chunk); } catch {}
     });
 
+    activeStream?.on('error', (err: any) => {
+      console.warn(`[activeStream] Error:`, err.message);
+    });
+
     ytProc.stderr.on('data', (d: Buffer) => {
       accumulatedStderr += d.toString();
     });
 
+    let ytEnded = false;
+    let ffmpegEnded = (isMp3Transcode || isVideoTranscode) && ffmpegProc ? false : true;
+
+    const checkFinished = (success: boolean) => {
+      if (ytEnded && ffmpegEnded) {
+        try { cacheWriteStream?.end(); } catch {}
+        if (hasSentHeaders && !res.writableEnded) res.end();
+        if (success && fs.existsSync(cacheTempPath) && fs.statSync(cacheTempPath).size > 1000) {
+          try {
+            if (fs.existsSync(cacheFilePath)) fs.unlinkSync(cacheFilePath);
+            fs.renameSync(cacheTempPath, cacheFilePath);
+          } catch {}
+        } else {
+          try { if (fs.existsSync(cacheTempPath)) fs.unlinkSync(cacheTempPath); } catch {}
+        }
+      }
+    };
+
+    if (ffmpegProc) {
+      ffmpegProc.on('close', (fCode: number | null) => {
+        ffmpegEnded = true;
+        checkFinished(fCode === 0);
+      });
+      ffmpegProc.on('error', (err: any) => {
+        console.warn(`[ffmpeg] error:`, err.message);
+        ffmpegEnded = true;
+        checkFinished(false);
+      });
+    }
+
     ytProc.on('close', (code: number | null) => {
+      ytEnded = true;
       if (strategyTimeout) {
         clearTimeout(strategyTimeout);
         strategyTimeout = null;
@@ -864,28 +924,7 @@ async function streamViaYtDlp(
         return;
       }
 
-      // If ffmpeg was piping, wait for it or end
-      if (ffmpegProc) {
-        ffmpegProc.on('close', () => {
-          try { cacheWriteStream?.end(); } catch {}
-          if (hasSentHeaders && !res.writableEnded) res.end();
-          if (fs.existsSync(cacheTempPath) && fs.statSync(cacheTempPath).size > 1000) {
-            try {
-              if (fs.existsSync(cacheFilePath)) fs.unlinkSync(cacheFilePath);
-              fs.renameSync(cacheTempPath, cacheFilePath);
-            } catch {}
-          }
-        });
-      } else {
-        try { cacheWriteStream?.end(); } catch {}
-        if (hasSentHeaders && !res.writableEnded) res.end();
-        if (code === 0 && fs.existsSync(cacheTempPath) && fs.statSync(cacheTempPath).size > 1000) {
-          try {
-            if (fs.existsSync(cacheFilePath)) fs.unlinkSync(cacheFilePath);
-            fs.renameSync(cacheTempPath, cacheFilePath);
-          } catch {}
-        }
-      }
+      checkFinished(code === 0);
     });
   };
 
@@ -920,7 +959,7 @@ export async function handleYouTubePlaylist(req: IncomingMessage, res: ServerRes
     '--dump-single-json',
     '--yes-playlist',
     '--playlist-end', '50',
-    '--extractor-args', 'youtube:player_client=android_embedded,web',
+    '--extractor-args', 'youtube:player_client=visionos,android,web',
     '--no-warnings'
   ];
 
@@ -1007,7 +1046,7 @@ export async function handleYouTubeSearch(req: IncomingMessage, res: ServerRespo
     '--flat-playlist',
     '--dump-single-json',
     '--no-warnings',
-    '--extractor-args', 'youtube:player_client=android,web',
+    '--extractor-args', 'youtube:player_client=visionos,android,web',
     `ytsearch${limit}:${q}`
   ];
 

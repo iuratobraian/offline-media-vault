@@ -1,6 +1,7 @@
 import { DownloadStatus, DownloadTask, MediaFormatOption, MediaItem } from '../types/media';
 import { saveMediaBlob, updateMediaItem } from '../database/db';
 import { extractAudioFromMediaBlob } from '../utils/audioExtractor';
+import { getBackendBaseUrl } from './providers/YouTubeProvider';
 
 type Listener = (tasks: Map<string, DownloadTask>) => void;
 
@@ -63,9 +64,16 @@ export class DownloadManager {
   }
 
   public async startDownload(item: MediaItem, formatOption?: MediaFormatOption): Promise<void> {
-    const downloadUrl = formatOption?.url || item.sourceUrl || item.originalUrl;
+    let downloadUrl = formatOption?.url || item.sourceUrl || item.originalUrl;
     if (!downloadUrl) {
       throw new Error('No hay una URL válida para descargar.');
+    }
+
+    if (downloadUrl.startsWith('/')) {
+      const baseUrl = getBackendBaseUrl();
+      if (baseUrl) {
+        downloadUrl = `${baseUrl}${downloadUrl}`;
+      }
     }
 
     if (item.canDownload === false && !formatOption) {
