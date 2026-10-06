@@ -186,7 +186,7 @@ const INNERTUBE_CLIENTS = [
   },
 ];
 
-async function fetchInnerTubeFormats(videoId: string): Promise<{ formats: InnerTubeFormat[], adaptiveFormats: InnerTubeFormat[], title: string, author: string, thumbnail: string } | null> {
+async function fetchInnerTubeFormats(videoId: string): Promise<{ formats: InnerTubeFormat[], adaptiveFormats: InnerTubeFormat[], title: string, author: string, duration: number, thumbnail: string } | null> {
   for (const client of INNERTUBE_CLIENTS) {
     try {
       const body: any = {
@@ -247,13 +247,14 @@ async function fetchInnerTubeFormats(videoId: string): Promise<{ formats: InnerT
 
       const title = data.videoDetails?.title || `YouTube ${videoId}`;
       const author = data.videoDetails?.author || 'YouTube';
+      const duration = parseInt(data.videoDetails?.lengthSeconds || '0', 10);
       const thumbnails = data.videoDetails?.thumbnail?.thumbnails || [];
       const thumbnail = thumbnails.length > 0
         ? thumbnails[thumbnails.length - 1].url
         : `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
       console.log(`[InnerTube] Client ${client.name} succeeded! Got ${formats.length + adaptiveFormats.length} formats.`);
-      return { formats, adaptiveFormats, title, author, thumbnail };
+      return { formats, adaptiveFormats, title, author, duration, thumbnail };
 
     } catch (e: any) {
       console.warn(`[InnerTube] Client ${client.name} error:`, e.message);
@@ -323,35 +324,68 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
   let title = `Video de YouTube (${videoId})`;
   let author = 'YouTube';
   let thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  let duration = 0;
 
-  // Fetch title/author/thumbnail from YouTube oEmbed (fast, no bot-block)
-  try {
-    const oembedRes = await fetch(
-      `https://www.youtube.com/oembed?url=${encodeURIComponent(canonicalUrl)}&format=json`,
-      { signal: AbortSignal.timeout(3000) }
-    );
-    if (oembedRes.ok) {
-      const data = await oembedRes.json();
-      if (data.title) title = data.title;
-      if (data.author_name) author = data.author_name;
-      if (data.thumbnail_url) thumbnail = data.thumbnail_url;
-    }
-  } catch {
+  // Try InnerTube first for exact duration & formats metadata
+  const innerTubeData = await fetchInnerTubeFormats(videoId);
+  if (innerTubeData) {
+    if (innerTubeData.title) title = innerTubeData.title;
+    if (innerTubeData.author) author = innerTubeData.author;
+    if (innerTubeData.thumbnail) thumbnail = innerTubeData.thumbnail;
+    if (innerTubeData.duration > 0) duration = innerTubeData.duration;
+  }
+
+  // Fallback to oEmbed if title is default
+  if (!innerTubeData || title.startsWith('Video de YouTube')) {
     try {
-      const noembedRes = await fetch(
-        `https://noembed.com/embed?url=${encodeURIComponent(canonicalUrl)}`,
+      const oembedRes = await fetch(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(canonicalUrl)}&format=json`,
         { signal: AbortSignal.timeout(3000) }
       );
-      if (noembedRes.ok) {
-        const data = await noembedRes.json();
+      if (oembedRes.ok) {
+        const data = await oembedRes.json();
         if (data.title) title = data.title;
         if (data.author_name) author = data.author_name;
         if (data.thumbnail_url) thumbnail = data.thumbnail_url;
       }
-    } catch {}
+    } catch {
+      try {
+        const noembedRes = await fetch(
+          `https://noembed.com/embed?url=${encodeURIComponent(canonicalUrl)}`,
+          { signal: AbortSignal.timeout(3000) }
+        );
+        if (noembedRes.ok) {
+          const data = await noembedRes.json();
+          if (data.title) title = data.title;
+          if (data.author_name) author = data.author_name;
+          if (data.thumbnail_url) thumbnail = data.thumbnail_url;
+        }
+      } catch {}
+    }
   }
 
+  // Calculate dynamic file sizes based on duration (or fallback defaults if duration = 0)
+  const dur = duration > 0 ? duration : 240; // Default estimate ~4 min if unknown
+
+  const size1080p = Math.round(dur * (2800000 / 8)); // ~2.8 Mbps video+audio
+  const size720p  = Math.round(dur * (1600000 / 8)); // ~1.6 Mbps video+audio
+  const size360p  = Math.round(dur * (600000 / 8));  // ~600 kbps video+audio
+  const sizeMp3   = Math.round(dur * (320000 / 8));  // ~320 kbps MP3
+  const sizeM4a   = Math.round(dur * (128000 / 8));  // ~128 kbps M4A
+
   const videoFormats = [
+    {
+      id: 'yt_video_1080p',
+      label: '1080p Full HD (MP4)',
+      format: 'MP4',
+      quality: '1080p',
+      type: 'video',
+      ext: '.mp4',
+      mimeType: 'video/mp4',
+      fileSize: size1080p,
+      supportsRangeRequests: true,
+      url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_1080p&title=${encodeURIComponent(title)}`,
+    },
     {
       id: 'yt_video_720p',
       label: '720p HD (MP4)',
@@ -360,7 +394,7 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
       type: 'video',
       ext: '.mp4',
       mimeType: 'video/mp4',
-      fileSize: 38000000,
+      fileSize: size720p,
       supportsRangeRequests: true,
       url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_720p&title=${encodeURIComponent(title)}`,
     },
@@ -372,7 +406,7 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
       type: 'video',
       ext: '.mp4',
       mimeType: 'video/mp4',
-      fileSize: 14000000,
+      fileSize: size360p,
       supportsRangeRequests: true,
       url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=video_360p&title=${encodeURIComponent(title)}`,
     },
@@ -381,25 +415,25 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
   const audioFormats = [
     {
       id: 'yt_audio_mp3',
-      label: 'MP3 Alta Calidad',
+      label: 'MP3 Solo Audio (320 kbps)',
       format: 'MP3',
-      quality: 'Alta calidad',
+      quality: '320 kbps',
       type: 'audio',
       ext: '.mp3',
       mimeType: 'audio/mpeg',
-      fileSize: 9000000,
+      fileSize: sizeMp3,
       supportsRangeRequests: true,
       url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_mp3&title=${encodeURIComponent(title)}`,
     },
     {
       id: 'yt_audio_m4a',
-      label: 'M4A / AAC Nativo',
+      label: 'M4A / AAC Nativo (128 kbps)',
       format: 'M4A',
-      quality: 'Nativa',
+      quality: '128 kbps',
       type: 'audio',
       ext: '.m4a',
       mimeType: 'audio/mp4',
-      fileSize: 3800000,
+      fileSize: sizeM4a,
       supportsRangeRequests: true,
       url: `/api/youtube/stream?url=${encodeURIComponent(canonicalUrl)}&formatKey=audio_m4a&title=${encodeURIComponent(title)}`,
     },
@@ -415,7 +449,7 @@ export async function handleYouTubeInfo(req: IncomingMessage, res: ServerRespons
       videoId,
       title,
       author,
-      duration: 0,
+      duration,
       thumbnail,
       videoFormats,
       audioFormats,

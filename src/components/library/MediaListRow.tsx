@@ -19,6 +19,7 @@ import {
   Share2,
   Cloud,
 } from 'lucide-react';
+import { DownloadFormatModal } from '../modals/DownloadFormatModal';
 
 interface MediaListRowProps {
   item: MediaItem;
@@ -28,18 +29,14 @@ interface MediaListRowProps {
 export const MediaListRow: React.FC<MediaListRowProps> = ({ item, allQueue }) => {
   const { playItem, currentItem, isPlaying } = usePlayer();
   const { toggleFavorite, startDownload, deleteItem } = useMedia();
+  const [showFormatModal, setShowFormatModal] = useState(false);
 
   const isCurrentPlaying = currentItem?.id === item.id && isPlaying;
   const isDownloaded = !!(item.isOffline || item.hasLocalBlob);
   const isDownloading = item.downloadStatus === 'downloading' || item.downloadStatus === 'preparing';
   const isError = item.downloadStatus === 'error';
 
-  const canDownload =
-    !isDownloaded &&
-    !isDownloading &&
-    item.canDownload !== false &&
-    item.metadata?.canDirectDownload !== false &&
-    item.source !== 'youtube';
+  const canDownload = !isDownloaded && !isDownloading;
 
   const handleRowClick = () => {
     if (item.source === 'youtube' && !isDownloaded) {
@@ -156,9 +153,9 @@ export const MediaListRow: React.FC<MediaListRowProps> = ({ item, allQueue }) =>
       <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
         {canDownload && (
           <button
-            onClick={() => startDownload(item)}
+            onClick={() => setShowFormatModal(true)}
             className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition"
-            title="Descargar para offline"
+            title="Descargar para offline (Elegir Video u Solo Audio)"
           >
             <Download className="h-4 w-4" />
           </button>
@@ -202,6 +199,13 @@ export const MediaListRow: React.FC<MediaListRowProps> = ({ item, allQueue }) =>
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Download Formats Selector Modal */}
+      <DownloadFormatModal
+        isOpen={showFormatModal}
+        item={item}
+        onClose={() => setShowFormatModal(false)}
+      />
     </div>
   );
 };

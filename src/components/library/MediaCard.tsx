@@ -23,6 +23,7 @@ import {
   Link as LinkIcon,
   Cloud,
 } from 'lucide-react';
+import { DownloadFormatModal } from '../modals/DownloadFormatModal';
 
 interface MediaCardProps {
   item: MediaItem;
@@ -36,6 +37,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, allQueue }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [showFormatModal, setShowFormatModal] = useState(false);
 
   const isCurrentPlaying = currentItem?.id === item.id && isPlaying;
   // Strictly offline if Blob is confirmed in IndexedDB
@@ -43,12 +45,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, allQueue }) => {
   const isDownloading = item.downloadStatus === 'downloading' || item.downloadStatus === 'preparing';
   const isError = item.downloadStatus === 'error';
 
-  const canDownload =
-    !isDownloaded &&
-    !isDownloading &&
-    item.canDownload !== false &&
-    item.metadata?.canDirectDownload !== false &&
-    item.source !== 'youtube';
+  const canDownload = !isDownloaded && !isDownloading;
 
   const handlePlayClick = () => {
     if (item.source === 'youtube' && !isDownloaded) {
@@ -60,7 +57,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, allQueue }) => {
 
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    startDownload(item);
+    setShowFormatModal(true);
   };
 
   const handleFavoriteClick = (e: React.MouseEvent) => {
@@ -462,6 +459,13 @@ export const MediaCard: React.FC<MediaCardProps> = ({ item, allQueue }) => {
           </div>
         </div>
       )}
+
+      {/* Download format selector modal */}
+      <DownloadFormatModal
+        isOpen={showFormatModal}
+        item={item}
+        onClose={() => setShowFormatModal(false)}
+      />
     </div>
   );
 };

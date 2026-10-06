@@ -22,8 +22,10 @@ import {
   SkipForward,
   Video,
   Sliders,
+  Download,
 } from 'lucide-react';
 import { extractYouTubeId, extractVimeoId } from '../../services/analyzer';
+import { DownloadFormatModal } from '../modals/DownloadFormatModal';
 
 export const VideoPlayerModal: React.FC = () => {
   const {
@@ -62,6 +64,7 @@ export const VideoPlayerModal: React.FC = () => {
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [forceShowYouTubeVideo, setForceShowYouTubeVideo] = useState(false);
+  const [showFormatModal, setShowFormatModal] = useState(false);
 
   // Reset video toggle on track change
   useEffect(() => {
@@ -165,6 +168,15 @@ export const VideoPlayerModal: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowFormatModal(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition active:scale-95 shadow-md shadow-emerald-500/20"
+              title="Descargar / Elegir Formato (Video u Solo Audio)"
+            >
+              <Download className="h-4 w-4" />
+              <span>Descargar</span>
+            </button>
+
             {document.pictureInPictureEnabled && !isYouTubeOnline && (
               <button
                 onClick={togglePiP}
@@ -566,6 +578,13 @@ export const VideoPlayerModal: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Download Formats Selection Modal */}
+      <DownloadFormatModal
+        isOpen={showFormatModal}
+        item={currentItem}
+        onClose={() => setShowFormatModal(false)}
+      />
     </div>
   );
 };
