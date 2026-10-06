@@ -30,9 +30,11 @@ import {
   SlidersHorizontal,
   X,
   Loader2,
+  Bot,
 } from 'lucide-react';
 import { getBackendBaseUrl } from '../services/providers/YouTubeProvider';
 import { preferencesManager } from '../services/preferencesManager';
+import { playlistBot } from '../services/playlistBot';
 
 interface DashboardPageProps {
   onOpenAddModal: () => void;
@@ -74,6 +76,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [suggestedTracks, setSuggestedTracks] = useState<Array<{ id: string; title: string; duration: number; thumbnail: string; url: string }>>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [userInterests, setUserInterests] = useState<string[]>([]);
+  const [isBotGenerating, setIsBotGenerating] = useState(false);
+  const [botMessage, setBotMessage] = useState<string | null>(null);
+
+  const handleGenerateBotPlaylists = async () => {
+    setIsBotGenerating(true);
+    setBotMessage('🤖 Bot analizando tus gustos y generando playlists inteligentes...');
+    try {
+      await playlistBot.generateAllBotPlaylists();
+      const list = await getAllPlaylists();
+      setPlaylists(list);
+      setBotMessage('¡Playlists del Bot (Top 10, Top 100, Lo Más Escuchado) actualizadas con éxito!');
+    } catch (err: any) {
+      setBotMessage('Error al generar playlists del bot');
+    } finally {
+      setIsBotGenerating(false);
+      setTimeout(() => setBotMessage(null), 4000);
+    }
+  };
 
   // Load playlists & user interests
   useEffect(() => {
@@ -580,6 +600,46 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <span>Ver</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </div>
+        </div>
+      )}
+
+      {/* Bot Generador de Playlists Card */}
+      <div className="rounded-3xl border border-indigo-500/30 bg-gradient-to-r from-indigo-900/40 via-[#0f1424] to-emerald-950/30 p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/20">
+            <Bot className="h-5 w-5" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-white">Bot Generador de Playlists</h3>
+              <span className="rounded-full bg-indigo-500/20 border border-indigo-500/40 px-2.5 py-0.5 text-[10px] font-bold text-indigo-300">
+                🤖 Automático
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Crea automáticamente listas con lo más escuchado por ti, Top 10 tendencias, Top 100 y colecciones por artista
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleGenerateBotPlaylists}
+          disabled={isBotGenerating}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-500/20 hover:from-indigo-400 hover:to-purple-400 transition active:scale-95 disabled:opacity-50 shrink-0"
+        >
+          {isBotGenerating ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          <span>{isBotGenerating ? 'Generando Playlists...' : 'Generar / Actualizar Playlists'}</span>
+        </button>
+      </div>
+
+      {botMessage && (
+        <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs text-indigo-300 animate-fade-in flex items-center gap-2">
+          <Sparkles className="h-4 w-4 shrink-0 text-indigo-400" />
+          <span>{botMessage}</span>
         </div>
       )}
 

@@ -4,6 +4,8 @@ import { getMediaBlob, updateMediaItem } from '../database/db';
 import { updateMediaSession, updateMediaSessionPositionState } from '../services/mediaSession';
 import { getBackendBaseUrl } from '../services/providers/YouTubeProvider';
 import { audioEqualizer } from '../services/audioEqualizer';
+import { smartDownloader } from '../services/smartDownloader';
+import { playlistBot } from '../services/playlistBot';
 
 interface PlayerContextType {
   // Current playing track/video
@@ -348,8 +350,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     }
 
-    // Record last played in IndexedDB
-    updateMediaItem(item.id, { lastPlayedAt: Date.now() }).catch(() => {});
+    // Record playback event in Bot and trigger Smart Downloads in background
+    playlistBot.recordPlayback(item).catch(() => {});
+    smartDownloader.handleTrackPlay(item, newQueue || queue).catch(() => {});
 
     // Update Media Session API
     updateMediaSession(item, {

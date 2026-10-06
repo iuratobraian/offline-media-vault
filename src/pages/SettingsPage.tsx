@@ -30,6 +30,7 @@ import {
   Plus,
   X,
   Check,
+  Zap,
 } from 'lucide-react';
 import { preferencesManager, DownloadFormatPref } from '../services/preferencesManager';
 import { SortOption } from '../types/media';
@@ -396,12 +397,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage,
           </div>
         </div>
 
-        {/* 3. Reproducción Automática y Bóveda */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/5">
+        {/* 3. Reproducción Automática y Descargas Inteligentes */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-white/5">
           <label className="flex items-center justify-between p-3 rounded-2xl border border-white/10 bg-white/[0.02] cursor-pointer hover:bg-white/5">
             <div>
-              <p className="text-xs font-bold text-white">Autoreproducir siguiente pista</p>
-              <p className="text-[10px] text-slate-400">Pasa al siguiente audio/video al terminar</p>
+              <p className="text-xs font-bold text-white">Autoreproducir siguiente</p>
+              <p className="text-[10px] text-slate-400">Pasa a la siguiente pista</p>
             </div>
             <input
               type="checkbox"
@@ -413,13 +414,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage,
 
           <label className="flex items-center justify-between p-3 rounded-2xl border border-white/10 bg-white/[0.02] cursor-pointer hover:bg-white/5">
             <div>
-              <p className="text-xs font-bold text-white">Recordar posición de reproducción</p>
-              <p className="text-[10px] text-slate-400">Reanuda desde donde lo dejaste</p>
+              <p className="text-xs font-bold text-white">Recordar posición</p>
+              <p className="text-[10px] text-slate-400">Reanuda donde lo dejaste</p>
             </div>
             <input
               type="checkbox"
               checked={userPrefs.rememberPosition}
               onChange={(e) => updatePreferences({ rememberPosition: e.target.checked })}
+              className="h-4 w-4 rounded accent-emerald-500"
+            />
+          </label>
+
+          <label className="flex items-center justify-between p-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 cursor-pointer hover:bg-emerald-500/20 transition">
+            <div>
+              <p className="text-xs font-bold text-emerald-300 flex items-center gap-1">
+                <Zap className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Descargas Inteligentes</span>
+              </p>
+              <p className="text-[10px] text-slate-400">Pre-descarga mientras escuchas</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={userPrefs.smartDownloadsEnabled}
+              onChange={(e) => updatePreferences({ smartDownloadsEnabled: e.target.checked })}
               className="h-4 w-4 rounded accent-emerald-500"
             />
           </label>

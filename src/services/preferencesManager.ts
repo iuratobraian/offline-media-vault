@@ -15,6 +15,7 @@ export interface UserPreferences {
   defaultCategory: string;
   autoplayNext: boolean;
   rememberPosition: boolean;
+  smartDownloadsEnabled: boolean;
   ambientGlow: boolean;
   compactMode: boolean;
   likedArtists: string[];
@@ -30,6 +31,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   defaultCategory: 'all',
   autoplayNext: true,
   rememberPosition: true,
+  smartDownloadsEnabled: true,
   ambientGlow: true,
   compactMode: false,
   likedArtists: [],
