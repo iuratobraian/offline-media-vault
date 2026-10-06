@@ -13,7 +13,9 @@ import {
   AlertCircle,
   Sparkles,
   ShieldAlert,
+  Star,
 } from 'lucide-react';
+import { preferencesManager } from '../../services/preferencesManager';
 
 interface DownloadFormatModalProps {
   isOpen: boolean;
@@ -279,77 +281,114 @@ export const DownloadFormatModal: React.FC<DownloadFormatModalProps> = ({
             <Loader2 className="h-8 w-8 text-emerald-400 animate-spin" />
             <p className="text-xs text-slate-300">Cargando opciones de peso y calidad exactas...</p>
           </div>
-        ) : (
-          <div className="space-y-5">
-            {/* VIDEO OPTIONS */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-indigo-400">
-                <span className="flex items-center gap-2">
-                  <Video className="h-4 w-4" />
-                  <span>🎬 Opciones de Video</span>
-                </span>
-                <span className="text-[10px] text-slate-400">Video + Audio integrados</span>
+        ) : (() => {
+          const prefFormat = preferencesManager.getPreferences().downloadFormat;
+          return (
+            <div className="space-y-5">
+              {/* VIDEO OPTIONS */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-indigo-400">
+                  <span className="flex items-center gap-2">
+                    <Video className="h-4 w-4" />
+                    <span>🎬 Opciones de Video</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Video + Audio integrados</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {videoFormats.map((fmt) => {
+                    const isPreferred =
+                      (prefFormat === 'video_1080p' && fmt.quality === '1080p') ||
+                      (prefFormat === 'video_720p' && fmt.quality === '720p');
+                    return (
+                      <button
+                        key={fmt.id}
+                        onClick={() => handleSelectFormat(fmt)}
+                        disabled={downloadStep !== 'idle'}
+                        className={`flex items-center justify-between p-3.5 rounded-2xl border transition active:scale-98 text-left group disabled:opacity-50 ${
+                          isPreferred
+                            ? 'border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20'
+                            : 'border-white/10 bg-white/[0.02] hover:bg-indigo-500/10 hover:border-indigo-500/40'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-white group-hover:text-indigo-300">
+                              {fmt.label}
+                            </p>
+                            {isPreferred && (
+                              <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold px-1.5 py-0.5 border border-amber-500/30">
+                                <Star className="h-2.5 w-2.5 text-amber-400" />
+                                <span>Preferido</span>
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {fmt.format} • {fmt.quality || 'HD'} {fmt.fileSize ? `• ~${formatBytes(fmt.fileSize)}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition shrink-0">
+                          <Download className="h-4 w-4" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {videoFormats.map((fmt) => (
-                  <button
-                    key={fmt.id}
-                    onClick={() => handleSelectFormat(fmt)}
-                    disabled={downloadStep !== 'idle'}
-                    className="flex items-center justify-between p-3.5 rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-indigo-500/10 hover:border-indigo-500/40 transition active:scale-98 text-left group disabled:opacity-50"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-white group-hover:text-indigo-300">
-                        {fmt.label}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        {fmt.format} • {fmt.quality || 'HD'} {fmt.fileSize ? `• ~${formatBytes(fmt.fileSize)}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition shrink-0">
-                      <Download className="h-4 w-4" />
-                    </div>
-                  </button>
-                ))}
+              {/* AUDIO OPTIONS */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  <span className="flex items-center gap-2">
+                    <Music className="h-4 w-4" />
+                    <span>🎵 Solo Audio (Música / Podcast)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Extracción directa de audio</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {audioFormats.map((fmt) => {
+                    const isPreferred =
+                      (prefFormat === 'audio_mp3' && fmt.format === 'MP3') ||
+                      (prefFormat === 'audio_m4a' && fmt.format === 'M4A');
+                    return (
+                      <button
+                        key={fmt.id}
+                        onClick={() => handleSelectFormat(fmt)}
+                        disabled={downloadStep !== 'idle'}
+                        className={`flex items-center justify-between p-3.5 rounded-2xl border transition active:scale-98 text-left group disabled:opacity-50 ${
+                          isPreferred
+                            ? 'border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20'
+                            : 'border-white/10 bg-white/[0.02] hover:bg-emerald-500/10 hover:border-emerald-500/40'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-bold text-white group-hover:text-emerald-300">
+                              {fmt.label}
+                            </p>
+                            {isPreferred && (
+                              <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold px-1.5 py-0.5 border border-amber-500/30">
+                                <Star className="h-2.5 w-2.5 text-amber-400" />
+                                <span>Preferido</span>
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {fmt.format} {fmt.quality ? `• ${fmt.quality}` : ''} {fmt.fileSize ? `• ~${formatBytes(fmt.fileSize)}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition shrink-0">
+                          <Download className="h-4 w-4" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-
-            {/* AUDIO OPTIONS */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-emerald-400">
-                <span className="flex items-center gap-2">
-                  <Music className="h-4 w-4" />
-                  <span>🎵 Solo Audio (Música / Podcast)</span>
-                </span>
-                <span className="text-[10px] text-slate-400">Extracción directa de audio</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {audioFormats.map((fmt) => (
-                  <button
-                    key={fmt.id}
-                    onClick={() => handleSelectFormat(fmt)}
-                    disabled={downloadStep !== 'idle'}
-                    className="flex items-center justify-between p-3.5 rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-emerald-500/10 hover:border-emerald-500/40 transition active:scale-98 text-left group disabled:opacity-50"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-white group-hover:text-emerald-300">
-                        {fmt.label}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        {fmt.format} {fmt.quality ? `• ${fmt.quality}` : ''} {fmt.fileSize ? `• ~${formatBytes(fmt.fileSize)}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition shrink-0">
-                      <Download className="h-4 w-4" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

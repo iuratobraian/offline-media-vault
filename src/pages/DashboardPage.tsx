@@ -32,6 +32,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { getBackendBaseUrl } from '../services/providers/YouTubeProvider';
+import { preferencesManager } from '../services/preferencesManager';
 
 interface DashboardPageProps {
   onOpenAddModal: () => void;
@@ -78,16 +79,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   useEffect(() => {
     getAllPlaylists().then((list) => setPlaylists(list));
 
-    try {
-      const saved = localStorage.getItem('sharemusic_interests');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setUserInterests(parsed);
-          loadInterestSuggestions(parsed[0]);
-        }
-      }
-    } catch {}
+    const prefs = preferencesManager.getPreferences();
+    const interests = prefs.likedArtists && prefs.likedArtists.length > 0 ? prefs.likedArtists : ['Coldplay', 'Duki', 'Lofi Hip Hop'];
+    setUserInterests(interests);
+    if (interests.length > 0) {
+      loadInterestSuggestions(interests[0]);
+    }
   }, []);
 
   const loadInterestSuggestions = async (term: string) => {

@@ -23,7 +23,16 @@ import {
   Key,
   AlertTriangle,
   CheckCheck,
+  Music,
+  Grid,
+  List,
+  Sliders,
+  Plus,
+  X,
+  Check,
 } from 'lucide-react';
+import { preferencesManager, DownloadFormatPref } from '../services/preferencesManager';
+import { SortOption } from '../types/media';
 
 interface SettingsPageProps {
   onNavigateToStorage: () => void;
@@ -37,9 +46,45 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage,
     loadSampleData,
     clearSampleData,
     mediaItems,
+    sortOption,
+    setSortOption,
+    viewMode,
+    setViewMode,
   } = useMedia();
 
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+
+  // User Preferences & Gustos state
+  const [userPrefs, setUserPrefs] = useState(() => preferencesManager.getPreferences());
+  const [newTagInput, setNewTagInput] = useState('');
+  const [prefNotice, setPrefNotice] = useState<string | null>(null);
+
+  const updatePreferences = (updates: Partial<typeof userPrefs>) => {
+    const updated = preferencesManager.save(updates);
+    setUserPrefs(updated);
+    if (updates.sortOption) setSortOption(updates.sortOption);
+    if (updates.viewMode) setViewMode(updates.viewMode);
+    setPrefNotice('¡Preferencias guardadas permanentemente!');
+    setTimeout(() => setPrefNotice(null), 3000);
+  };
+
+  const handleAddArtistTag = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newTagInput.trim();
+    if (!trimmed) return;
+    const current = userPrefs.likedArtists || [];
+    if (!current.includes(trimmed)) {
+      const next = [...current, trimmed];
+      updatePreferences({ likedArtists: next });
+    }
+    setNewTagInput('');
+  };
+
+  const handleRemoveArtistTag = (tag: string) => {
+    const current = userPrefs.likedArtists || [];
+    const next = current.filter((t) => t !== tag);
+    updatePreferences({ likedArtists: next });
+  };
 
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [sampleStatus, setSampleStatus] = useState<string | null>(null);
@@ -240,29 +285,207 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigateToStorage,
         </div>
       </div>
 
-      {/* Mis Gustos Musicales Section */}
-      <div className="rounded-3xl border border-white/10 bg-[#0f1422] p-5 sm:p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Configuración de Gustos y Preferencias Personalizadas */}
+      <div className="rounded-3xl border border-white/10 bg-[#0f1422] p-5 sm:p-6 shadow-xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 text-emerald-400">
-              <Sparkles className="h-5 w-5" />
+              <Sliders className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-white">Mis Gustos Musicales</h3>
+              <h3 className="text-sm sm:text-base font-bold text-white">Configuración de Gustos y Preferencias</h3>
               <p className="text-xs text-slate-400">
-                Personaliza qué cantantes, bandas o géneros aparecen en tu inicio sugeridos
+                Tus selecciones se guardan automáticamente y no se perderán nunca
               </p>
             </div>
           </div>
 
-          {onOpenOnboardingModal && (
-            <button
-              onClick={onOpenOnboardingModal}
-              className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition active:scale-95"
-            >
-              Configurar gustos
-            </button>
+          {prefNotice && (
+            <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 text-xs font-semibold text-emerald-300 animate-fade-in">
+              <Check className="h-3.5 w-3.5" />
+              <span>{prefNotice}</span>
+            </div>
           )}
+        </div>
+
+        {/* 1. Formato Preferido de Descarga */}
+        <div className="space-y-3">
+          <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
+            1. Formato Preferido al Descargar desde YouTube o Enlaces:
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            {[
+              { id: 'ask', label: 'Preguntar cada vez', desc: 'Muestra modal de formatos' },
+              { id: 'audio_mp3', label: 'Audio MP3 (320 kbps)', desc: 'Máxima calidad de música' },
+              { id: 'audio_m4a', label: 'Audio M4A (128 kbps)', desc: 'Descarga liviana' },
+              { id: 'video_720p', label: 'Video HD 720p (MP4)', desc: 'Calidad estándar HD' },
+              { id: 'video_1080p', label: 'Video Full HD 1080p', desc: 'Máxima definición' },
+            ].map((opt) => {
+              const isSelected = userPrefs.downloadFormat === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => updatePreferences({ downloadFormat: opt.id as DownloadFormatPref })}
+                  className={`flex flex-col p-3 rounded-2xl border text-left transition ${
+                    isSelected
+                      ? 'border-emerald-500 bg-emerald-500/15 text-white font-bold shadow-md shadow-emerald-500/10'
+                      : 'border-white/10 bg-white/[0.02] text-slate-300 hover:bg-white/5 hover:border-white/20'
+                  }`}
+                >
+                  <span className="text-xs font-bold flex items-center justify-between">
+                    {opt.label}
+                    {isSelected && <Check className="h-3.5 w-3.5 text-emerald-400" />}
+                  </span>
+                  <span className="text-[10px] text-slate-400 mt-1">{opt.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 2. Visualización y Ordenación por Defecto */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/5">
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
+              2. Vista por Defecto de Biblioteca:
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => updatePreferences({ viewMode: 'grid' })}
+                className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold border transition ${
+                  userPrefs.viewMode === 'grid'
+                    ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
+                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                }`}
+              >
+                <Grid className="h-4 w-4" />
+                <span>Cuadrícula</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updatePreferences({ viewMode: 'list' })}
+                className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-bold border transition ${
+                  userPrefs.viewMode === 'list'
+                    ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
+                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                }`}
+              >
+                <List className="h-4 w-4" />
+                <span>Lista Compacta</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-200 uppercase tracking-wider">
+              3. Ordenación por Defecto:
+            </label>
+            <select
+              value={userPrefs.sortOption}
+              onChange={(e) => updatePreferences({ sortOption: e.target.value as SortOption })}
+              className="w-full rounded-xl border border-white/15 bg-slate-900 px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
+            >
+              <option value="recent">Más recientes primero</option>
+              <option value="oldest">Más antiguos primero</option>
+              <option value="alpha_asc">Título (A - Z)</option>
+              <option value="alpha_desc">Título (Z - A)</option>
+              <option value="size_desc">Tamaño (Mayor a menor)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* 3. Reproducción Automática y Bóveda */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/5">
+          <label className="flex items-center justify-between p-3 rounded-2xl border border-white/10 bg-white/[0.02] cursor-pointer hover:bg-white/5">
+            <div>
+              <p className="text-xs font-bold text-white">Autoreproducir siguiente pista</p>
+              <p className="text-[10px] text-slate-400">Pasa al siguiente audio/video al terminar</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={userPrefs.autoplayNext}
+              onChange={(e) => updatePreferences({ autoplayNext: e.target.checked })}
+              className="h-4 w-4 rounded accent-emerald-500"
+            />
+          </label>
+
+          <label className="flex items-center justify-between p-3 rounded-2xl border border-white/10 bg-white/[0.02] cursor-pointer hover:bg-white/5">
+            <div>
+              <p className="text-xs font-bold text-white">Recordar posición de reproducción</p>
+              <p className="text-[10px] text-slate-400">Reanuda desde donde lo dejaste</p>
+            </div>
+            <input
+              type="checkbox"
+              checked={userPrefs.rememberPosition}
+              onChange={(e) => updatePreferences({ rememberPosition: e.target.checked })}
+              className="h-4 w-4 rounded accent-emerald-500"
+            />
+          </label>
+        </div>
+
+        {/* 4. Mis Gustos y Cantantes Elegidos */}
+        <div className="space-y-3 pt-2 border-t border-white/5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                4. Mis Cantantes, Bandas y Géneros Preferidos:
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Se usan para generar tus sugerencias automáticas de música en el Inicio
+              </p>
+            </div>
+            {onOpenOnboardingModal && (
+              <button
+                type="button"
+                onClick={onOpenOnboardingModal}
+                className="rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 transition"
+              >
+                Abrir selector completo
+              </button>
+            )}
+          </div>
+
+          <form onSubmit={handleAddArtistTag} className="flex gap-2">
+            <input
+              type="text"
+              value={newTagInput}
+              onChange={(e) => setNewTagInput(e.target.value)}
+              placeholder="Añadir artista o género (ej: Duki, Rock, Queen)..."
+              className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="flex items-center gap-1 rounded-xl bg-emerald-500 px-3.5 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Añadir</span>
+            </button>
+          </form>
+
+          <div className="flex flex-wrap gap-1.5 p-2.5 rounded-2xl bg-white/[0.02] border border-white/5 min-h-[44px]">
+            {userPrefs.likedArtists.length === 0 ? (
+              <span className="text-xs text-slate-500 italic p-1">No has añadido gustos aún. Usa el campo arriba.</span>
+            ) : (
+              userPrefs.likedArtists.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 text-xs font-semibold text-emerald-300"
+                >
+                  <Music className="h-3 w-3" />
+                  <span>{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveArtistTag(tag)}
+                    className="hover:text-rose-400 transition"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
         </div>
       </div>
 

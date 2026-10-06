@@ -22,6 +22,7 @@ import {
   clearEntireDatabase,
 } from '../database/db';
 import { downloadManager } from '../services/downloadManager';
+import { preferencesManager } from '../services/preferencesManager';
 
 interface MediaContextType {
   mediaItems: MediaItem[];
@@ -76,16 +77,32 @@ interface MediaContextType {
 const MediaContext = createContext<MediaContextType | null>(null);
 
 export const MediaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const initialPrefs = preferencesManager.getPreferences();
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategoryState, setSelectedCategoryState] = useState<string>(initialPrefs.defaultCategory || 'all');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [sortOption, setSortOption] = useState<SortOption>('recent');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sortOptionState, setSortOptionState] = useState<SortOption>(initialPrefs.sortOption || 'recent');
+  const [viewModeState, setViewModeState] = useState<'grid' | 'list'>(initialPrefs.viewMode || 'grid');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const setSortOption = (s: SortOption) => {
+    setSortOptionState(s);
+    preferencesManager.setSortOption(s);
+  };
+
+  const setViewMode = (v: 'grid' | 'list') => {
+    setViewModeState(v);
+    preferencesManager.setViewMode(v);
+  };
+
+  const setSelectedCategory = (c: string) => {
+    setSelectedCategoryState(c);
+    preferencesManager.save({ defaultCategory: c });
+  };
   const [storageBreakdown, setStorageBreakdown] = useState<StorageBreakdown>({
     usedBytes: 0,
     quotaBytes: 0,
@@ -754,7 +771,7 @@ export const MediaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         // Category filter
-        if (selectedCategory !== 'all' && item.category !== selectedCategory) {
+        if (selectedCategoryState !== 'all' && item.category !== selectedCategoryState) {
           return false;
         }
 
@@ -766,7 +783,7 @@ export const MediaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return true;
       })
       .sort((a, b) => {
-        switch (sortOption) {
+        switch (sortOptionState) {
           case 'recent':
             return b.createdAt - a.createdAt;
           case 'oldest':
@@ -785,7 +802,7 @@ export const MediaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return b.createdAt - a.createdAt;
         }
       });
-  }, [mediaItems, searchQuery, selectedFilter, selectedCategory, selectedTag, sortOption]);
+  }, [mediaItems, searchQuery, selectedFilter, selectedCategoryState, selectedTag, sortOptionState]);
 
   return (
     <MediaContext.Provider
@@ -797,10 +814,10 @@ export const MediaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         storageBreakdown,
         searchQuery,
         selectedFilter,
-        selectedCategory,
+        selectedCategory: selectedCategoryState,
         selectedTag,
-        sortOption,
-        viewMode,
+        sortOption: sortOptionState,
+        viewMode: viewModeState,
         isLoading,
         allTags,
         setSearchQuery,

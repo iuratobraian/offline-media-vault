@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, Music, Plus, X, Check } from 'lucide-react';
+import { preferencesManager } from '../../services/preferencesManager';
 
 interface OnboardingModalProps {
   isOpen?: boolean;
@@ -47,10 +48,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
   const [selectedInterests, setSelectedInterests] = useState<string[]>(() => {
     if (initialInterests.length > 0) return initialInterests;
-    try {
-      const saved = localStorage.getItem('sharemusic_interests');
-      if (saved) return JSON.parse(saved);
-    } catch {}
+    const prefs = preferencesManager.getPreferences();
+    if (prefs.likedArtists && prefs.likedArtists.length > 0) return prefs.likedArtists;
     return ['Coldplay', 'Duki', 'Lofi Hip Hop'];
   });
 
@@ -86,8 +85,10 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   };
 
   const handleSaveAndStart = () => {
-    localStorage.setItem('sharemusic_interests', JSON.stringify(selectedInterests));
-    localStorage.setItem('sharemusic_onboarded', 'true');
+    preferencesManager.setLikedArtists(selectedInterests);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sharemusic_onboarded', 'true');
+    }
     onSave?.(selectedInterests);
     if (onStart) onStart();
     handleClose();
