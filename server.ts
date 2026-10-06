@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { handleYouTubeInfo, handleYouTubeStream, handleYouTubePlaylist, handleYouTubeSearch, ensureDefaultCookies } from './src/server/youtubeBackend';
 
 const app = express();
@@ -32,6 +33,20 @@ app.get('/api/health', (_req, res) => {
     timestamp: Date.now(),
     service: 'Offline Media Vault Engine',
   });
+});
+
+// LAN info endpoint for local QR sharing
+app.get('/api/lan/info', (_req, res) => {
+  const interfaces = os.networkInterfaces();
+  const ips: string[] = [];
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        ips.push(net.address);
+      }
+    }
+  }
+  res.json({ ips, port: PORT });
 });
 
 // YouTube API endpoints

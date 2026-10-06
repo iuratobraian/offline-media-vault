@@ -50,6 +50,7 @@ interface MediaContextType {
   refreshMedia: () => Promise<void>;
   addMedia: (item: MediaItem) => Promise<void>;
   toggleFavorite: (id: string) => Promise<void>;
+  toggleVaultItem: (id: string) => Promise<void>;
   updateItem: (id: string, updates: Partial<MediaItem>) => Promise<void>;
   deleteItem: (id: string, deleteBlobOnly?: boolean) => Promise<void>;
   batchDelete: (ids: string[], deleteBlobsOnly?: boolean) => Promise<void>;
@@ -201,6 +202,16 @@ export const MediaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await updateMediaItem(id, { favorite: newFav });
     setMediaItems((prev) =>
       prev.map((m) => (m.id === id ? { ...m, favorite: newFav } : m))
+    );
+  };
+
+  const toggleVaultItem = async (id: string) => {
+    const item = mediaItems.find((m) => m.id === id);
+    if (!item) return;
+    const nextVaultState = !item.isVaultItem;
+    await updateMediaItem(id, { isVaultItem: nextVaultState });
+    setMediaItems((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, isVaultItem: nextVaultState } : m))
     );
   };
 
@@ -801,6 +812,7 @@ export const MediaProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         refreshMedia,
         addMedia,
         toggleFavorite,
+        toggleVaultItem,
         updateItem,
         deleteItem,
         batchDelete,

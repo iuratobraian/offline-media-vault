@@ -15,6 +15,7 @@ import {
   ListPlus,
   Music,
   CheckCircle2,
+  Sliders,
 } from 'lucide-react';
 
 interface FullAudioPlayerModalProps {
@@ -44,6 +45,7 @@ export const FullAudioPlayerModal: React.FC<FullAudioPlayerModalProps> = ({
     setPlaybackRate,
     playNext,
     playPrevious,
+    openEqualizerModal,
   } = usePlayer();
 
   const { toggleFavorite } = useMedia();
@@ -229,6 +231,16 @@ export const FullAudioPlayerModal: React.FC<FullAudioPlayerModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Equalizer Button */}
+            <button
+              onClick={openEqualizerModal}
+              className="flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/20 transition"
+              title="Ecualizador"
+            >
+              <Sliders className="h-3.5 w-3.5 text-emerald-400" />
+              <span>EQ</span>
+            </button>
 
             {/* Add to Playlist button */}
             {onOpenPlaylistModal && (

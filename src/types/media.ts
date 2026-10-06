@@ -58,6 +58,7 @@ export interface MediaItem {
   category: string; // Category id or 'general'
   tags: string[];
   favorite: boolean;
+  isVaultItem?: boolean;
   downloadStatus: DownloadStatus;
   createdAt: number;
   downloadedAt?: number;

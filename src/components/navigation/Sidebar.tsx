@@ -13,13 +13,14 @@ import {
 } from 'lucide-react';
 import { formatBytes } from '../../utils/formatters';
 import { StorageBreakdown } from '../../types/media';
-import { FolderSearch } from 'lucide-react';
+import { FolderSearch, Lock } from 'lucide-react';
 
 interface SidebarProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   onOpenAddModal: () => void;
   onOpenFolderScanModal?: () => void;
+  onOpenVaultModal?: () => void;
   activeDownloadsCount: number;
   storageBreakdown: StorageBreakdown;
 }
@@ -29,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   onOpenAddModal,
   onOpenFolderScanModal,
+  onOpenVaultModal,
   activeDownloadsCount,
   storageBreakdown,
 }) => {
@@ -73,6 +75,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <FolderSearch className="h-4 w-4 text-emerald-400" />
                 <span>ESCANEAR CARPETA</span>
+              </button>
+            )}
+
+            {onOpenVaultModal && (
+              <button
+                onClick={onOpenVaultModal}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 py-2.5 px-3 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/50 transition active:scale-[0.98]"
+              >
+                <Lock className="h-4 w-4 text-amber-400" />
+                <span>BÓVEDA SECRETA</span>
               </button>
             )}
           </div>

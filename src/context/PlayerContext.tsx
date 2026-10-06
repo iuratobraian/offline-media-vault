@@ -3,6 +3,7 @@ import { MediaItem } from '../types/media';
 import { getMediaBlob, updateMediaItem } from '../database/db';
 import { updateMediaSession, updateMediaSessionPositionState } from '../services/mediaSession';
 import { getBackendBaseUrl } from '../services/providers/YouTubeProvider';
+import { audioEqualizer } from '../services/audioEqualizer';
 
 interface PlayerContextType {
   // Current playing track/video
@@ -16,6 +17,7 @@ interface PlayerContextType {
   playbackRate: number;
   isLoading: boolean;
   isVideoModalOpen: boolean;
+  isEqualizerModalOpen: boolean;
   resumeNotice: { seconds: number; formatted: string } | null;
 
   // Actions
@@ -30,6 +32,8 @@ interface PlayerContextType {
   playPrevious: () => void;
   closeVideoModal: () => void;
   openVideoModal: () => void;
+  openEqualizerModal: () => void;
+  closeEqualizerModal: () => void;
   dismissResumeNotice: () => void;
   applyResumeNotice: () => void;
   togglePiP: () => Promise<void>;
@@ -51,6 +55,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [playbackRate, setPlaybackRateState] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState<boolean>(false);
+  const [isEqualizerModalOpen, setIsEqualizerModalOpen] = useState<boolean>(false);
   const [resumeNotice, setResumeNotice] = useState<{ seconds: number; formatted: string } | null>(null);
 
   const [queue, setQueue] = useState<MediaItem[]>([]);
@@ -99,7 +104,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      if (audioElementRef.current) {
+        audioEqualizer.attachMediaElement(audioElementRef.current);
+      }
+    };
     const handlePause = () => setIsPlaying(false);
     const handleWaiting = () => setIsLoading(true);
     const handleCanPlay = () => setIsLoading(false);
@@ -191,6 +201,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const registerVideoElement = (el: HTMLVideoElement | null) => {
     videoElementRef.current = el;
+    if (el) {
+      audioEqualizer.attachMediaElement(el);
+    }
   };
 
   const reportVideoTimeUpdate = (time: number, totalDuration: number) => {
@@ -492,6 +505,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         playbackRate,
         isLoading,
         isVideoModalOpen,
+        isEqualizerModalOpen,
         resumeNotice,
         playItem,
         togglePlayPause,
@@ -504,6 +518,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         playPrevious: handlePreviousTrack,
         closeVideoModal,
         openVideoModal,
+        openEqualizerModal: () => setIsEqualizerModalOpen(true),
+        closeEqualizerModal: () => setIsEqualizerModalOpen(false),
         dismissResumeNotice,
         applyResumeNotice,
         togglePiP,

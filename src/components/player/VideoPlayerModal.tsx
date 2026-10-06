@@ -21,6 +21,7 @@ import {
   SkipBack,
   SkipForward,
   Video,
+  Sliders,
 } from 'lucide-react';
 import { extractYouTubeId, extractVimeoId } from '../../services/analyzer';
 
@@ -51,6 +52,7 @@ export const VideoPlayerModal: React.FC = () => {
     setIsPlaying,
     playNext,
     playPrevious,
+    openEqualizerModal,
   } = usePlayer();
 
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
@@ -500,8 +502,18 @@ export const VideoPlayerModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right group: Speed & Fullscreen */}
+              {/* Right group: Speed & Equalizer & Fullscreen */}
               <div className="flex items-center gap-2">
+                {/* Equalizer button */}
+                <button
+                  onClick={openEqualizerModal}
+                  className="flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-white/20 transition"
+                  title="Ecualizador de audio"
+                >
+                  <Sliders className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>EQ</span>
+                </button>
+
                 {/* Speed selector */}
                 <div className="relative">
                   <button

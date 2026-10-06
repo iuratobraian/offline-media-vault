@@ -14,9 +14,14 @@ import {
   FileText,
   Loader2,
   PieChart,
+  CopyCheck,
 } from 'lucide-react';
 
-export const StoragePage: React.FC = () => {
+interface StoragePageProps {
+  onOpenDuplicatesModal?: () => void;
+}
+
+export const StoragePage: React.FC<StoragePageProps> = ({ onOpenDuplicatesModal }) => {
   const {
     mediaItems,
     storageBreakdown,
@@ -261,6 +266,16 @@ export const StoragePage: React.FC = () => {
         </h3>
 
         <div className="flex flex-wrap gap-2.5">
+          {onOpenDuplicatesModal && (
+            <button
+              onClick={onOpenDuplicatesModal}
+              className="flex items-center gap-1.5 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-3.5 py-2 text-xs font-semibold text-yellow-300 hover:bg-yellow-500/20 transition active:scale-95"
+            >
+              <CopyCheck className="h-3.5 w-3.5" />
+              <span>Escanear duplicados</span>
+            </button>
+          )}
+
           <button
             onClick={() => setShowDeleteOnlyOfflineModal(true)}
             disabled={downloadedItems.length === 0}

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { MediaProvider, useMedia } from './context/MediaContext';
-import { PlayerProvider } from './context/PlayerContext';
+import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { Navbar } from './components/navigation/Navbar';
 import { BottomBar, NavTab } from './components/navigation/BottomBar';
 import { Sidebar } from './components/navigation/Sidebar';
@@ -14,6 +14,10 @@ import { FolderScanModal } from './components/modals/FolderScanModal';
 import { ClipboardPromptModal } from './components/modals/ClipboardPromptModal';
 import { YouTubePlaylistModal } from './components/modals/YouTubePlaylistModal';
 import { PlaylistModal } from './components/modals/PlaylistModal';
+import { EqualizerModal } from './components/modals/EqualizerModal';
+import { ShareModal } from './components/modals/ShareModal';
+import { VaultModal } from './components/modals/VaultModal';
+import { DuplicatesModal } from './components/modals/DuplicatesModal';
 import { useClipboardWatcher } from './hooks/useClipboardWatcher';
 import { MediaItem } from './types/media';
 
@@ -28,6 +32,7 @@ import { SettingsPage } from './pages/SettingsPage';
 
 const AppContent: React.FC = () => {
   const { downloadTasks, storageBreakdown, setSelectedCategory } = useMedia();
+  const { isEqualizerModalOpen, closeEqualizerModal } = usePlayer();
 
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -45,6 +50,12 @@ const AppContent: React.FC = () => {
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false);
   const [playlistTargetItem, setPlaylistTargetItem] = useState<MediaItem | null>(null);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
+
+  // New Features: Share, Vault, Duplicates modals
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareTargetItem, setShareTargetItem] = useState<MediaItem | null>(null);
+  const [isVaultModalOpen, setIsVaultModalOpen] = useState(false);
+  const [isDuplicatesModalOpen, setIsDuplicatesModalOpen] = useState(false);
 
   // Clipboard auto-watcher for YouTube links
   useClipboardWatcher(
@@ -126,7 +137,7 @@ const AppContent: React.FC = () => {
           />
         );
       case 'storage':
-        return <StoragePage />;
+        return <StoragePage onOpenDuplicatesModal={() => setIsDuplicatesModalOpen(true)} />;
       case 'settings':
         return (
           <SettingsPage
@@ -179,6 +190,7 @@ const AppContent: React.FC = () => {
             setIsAddModalOpen(true);
           }}
           onOpenFolderScanModal={() => setIsFolderScanModalOpen(true)}
+          onOpenVaultModal={() => setIsVaultModalOpen(true)}
           activeDownloadsCount={activeDownloadsCount}
           storageBreakdown={storageBreakdown}
         />
@@ -266,6 +278,37 @@ const AppContent: React.FC = () => {
       <CategoryModal
         isOpen={isCategoryModalOpen}
         onClose={() => setIsCategoryModalOpen(false)}
+      />
+
+      {/* Equalizer & Audio Processor Modal */}
+      <EqualizerModal
+        isOpen={isEqualizerModalOpen}
+        onClose={closeEqualizerModal}
+      />
+
+      {/* Share & LAN QR Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        item={shareTargetItem}
+        onClose={() => {
+          setIsShareModalOpen(false);
+          setShareTargetItem(null);
+        }}
+      />
+
+      {/* Private Encrypted Vault Modal */}
+      <VaultModal
+        isOpen={isVaultModalOpen}
+        onClose={() => setIsVaultModalOpen(false)}
+        onUnlocked={() => {
+          setIsVaultModalOpen(false);
+        }}
+      />
+
+      {/* Duplicates Cleaner Modal */}
+      <DuplicatesModal
+        isOpen={isDuplicatesModalOpen}
+        onClose={() => setIsDuplicatesModalOpen(false)}
       />
 
       {/* First-Time Onboarding Welcome Modal */}
