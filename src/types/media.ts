@@ -123,6 +123,8 @@ export interface DownloadTask {
   canPause: boolean;
   startedAt: number;
   updatedAt: number;
+  elapsedSeconds?: number;
+  serverHost?: string;
 }
 
 export type SortOption = 

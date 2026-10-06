@@ -725,6 +725,9 @@ async function streamViaYtDlp(
       '--no-warnings',
       '--no-playlist',
       '--no-check-certificates',
+      '--concurrent-fragments', '4',
+      '--buffer-size', '128k',
+      '-4',
     ];
 
     const denoPath = findDenoPath();

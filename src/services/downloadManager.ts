@@ -21,6 +21,33 @@ export class DownloadManager {
   private tasks: Map<string, DownloadTask> = new Map();
   private activeStreams: Map<string, ActiveStream> = new Map();
   private listeners: Set<Listener> = new Set();
+  private tickerInterval: any = null;
+
+  private startTicker() {
+    if (this.tickerInterval) return;
+    this.tickerInterval = setInterval(() => {
+      let hasActive = false;
+      const now = Date.now();
+      this.tasks.forEach((t) => {
+        if (
+          t.status !== 'completed' &&
+          t.status !== 'error' &&
+          t.status !== 'cancelled' &&
+          t.status !== 'paused'
+        ) {
+          hasActive = true;
+          t.elapsedSeconds = Math.max(0, Math.floor((now - t.startedAt) / 1000));
+          t.updatedAt = now;
+        }
+      });
+      if (hasActive) {
+        this.notify();
+      } else {
+        clearInterval(this.tickerInterval);
+        this.tickerInterval = null;
+      }
+    }, 1000);
+  }
 
   public subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -76,6 +103,17 @@ export class DownloadManager {
       }
     }
 
+    let serverHost = '';
+    try {
+      const parsed = new URL(downloadUrl, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+      serverHost = parsed.hostname;
+
+      // Pre-warm Render cloud server if needed
+      if (serverHost.includes('onrender.com')) {
+        fetch(`${parsed.origin}/api/health`, { signal: AbortSignal.timeout(3000) }).catch(() => {});
+      }
+    } catch {}
+
     if (item.canDownload === false && !formatOption) {
       throw new Error(
         item.explanation || 'Esta fuente no proporciona un archivo descargable mediante este método.'
@@ -111,6 +149,8 @@ export class DownloadManager {
       canPause: supportsRange,
       startedAt: Date.now(),
       updatedAt: Date.now(),
+      elapsedSeconds: 0,
+      serverHost,
     };
 
     this.tasks.set(item.id, task);
@@ -127,6 +167,7 @@ export class DownloadManager {
     });
 
     await updateMediaItem(item.id, { downloadStatus: 'preparing' });
+    this.startTicker();
     this.notify();
 
     // Begin download stream
@@ -441,6 +482,7 @@ export class DownloadManager {
     task.updatedAt = Date.now();
 
     await updateMediaItem(item.id, { downloadStatus: 'downloading' });
+    this.startTicker();
     this.notify();
 
     this.executeDownload(item, abortController, streamInfo.receivedBytes);
